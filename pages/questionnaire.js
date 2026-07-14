@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import { supabase } from '../lib/supabase'
 import PinGate from '../components/PinGate'
@@ -131,7 +131,7 @@ export default function Questionnaire() {
     }
   }
 
-  useState(() => { loadTeams() }, [])
+  useEffect(() => { loadTeams() }, [])
 
   function handleTeamChange(e) {
     const id = e.target.value

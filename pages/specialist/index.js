@@ -20,9 +20,24 @@ const SCALE_C = {
 
 function flag(key, value) {
   if (value == null) return null
-  // Q_C1, Q_C2, Q_C4: 3-4 = alerte; Q_C3: 1-2 = alerte
   if (key === 'q_c3') return value <= 2 ? 'red' : value === 3 ? 'yellow' : 'green'
   return value >= 4 ? 'red' : value === 3 ? 'yellow' : 'green'
+}
+
+const PHYSICAL_STATUS_OPTIONS = [
+  { value: 'red',    emoji: '🔴', label: 'Aucune pratique',         bg: '#fee2e2', border: '#dc2626', text: '#991b1b' },
+  { value: 'yellow', emoji: '🟡', label: 'Pratique avec restrictions', bg: '#fef9c3', border: '#ca8a04', text: '#854d0e' },
+  { value: 'green',  emoji: '🟢', label: 'Aucune restriction',       bg: '#dcfce7', border: '#16a34a', text: '#166534' },
+]
+
+function PhysicalStatusBadge({ status }) {
+  const opt = PHYSICAL_STATUS_OPTIONS.find(o => o.value === status)
+  if (!opt) return <span style={{ color: '#999', fontSize: '0.8rem' }}>Non défini</span>
+  return (
+    <span style={{ background: opt.bg, color: opt.text, border: `1px solid ${opt.border}`, borderRadius: 20, padding: '2px 10px', fontSize: '0.8rem', fontWeight: 700 }}>
+      {opt.emoji} {opt.label}
+    </span>
+  )
 }
 
 export default function SpecialistView() {
@@ -31,9 +46,11 @@ export default function SpecialistView() {
   const [teams, setTeams] = useState([])
   const [selectedTeam, setSelectedTeam] = useState('')
   const [athletes, setAthletes] = useState([])
-  const [responses, setResponses] = useState([]) // all responses
-  const [filter, setFilter] = useState('all') // all | alerts
+  const [responses, setResponses] = useState([])
+  const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(false)
+  const [physicalStatuses, setPhysicalStatuses] = useState({}) // {athleteId: status}
+  const [savingStatus, setSavingStatus] = useState({}) // {athleteId: bool}
 
   useEffect(() => {
     const u = getSession()
@@ -44,8 +61,20 @@ export default function SpecialistView() {
 
   async function loadTeam(teamId) {
     setLoading(true)
-    const { data: ath } = await supabase.from('athletes').select('id, first_name, last_name').eq('team_id', teamId).order('last_name')
+    const { data: ath } = await supabase
+      .from('athletes')
+      .select('id, first_name, last_name, physical_status')
+      .eq('team_id', teamId)
+      .order('last_name')
     setAthletes(ath || [])
+
+    // Initialiser les statuts depuis la DB
+    const statusMap = {}
+    for (const a of (ath || [])) {
+      statusMap[a.id] = a.physical_status || null
+    }
+    setPhysicalStatuses(statusMap)
+
     if (!ath || ath.length === 0) { setLoading(false); return }
 
     const { data: recs } = await supabase
@@ -61,6 +90,19 @@ export default function SpecialistView() {
   function handleTeamChange(e) {
     setSelectedTeam(e.target.value)
     if (e.target.value) loadTeam(e.target.value)
+  }
+
+  async function setPhysicalStatus(athleteId, status) {
+    setSavingStatus(prev => ({ ...prev, [athleteId]: true }))
+    const newStatus = physicalStatuses[athleteId] === status ? null : status // toggle off si déjà sélectionné
+    const { error } = await supabase
+      .from('athletes')
+      .update({ physical_status: newStatus })
+      .eq('id', athleteId)
+    if (!error) {
+      setPhysicalStatuses(prev => ({ ...prev, [athleteId]: newStatus }))
+    }
+    setSavingStatus(prev => ({ ...prev, [athleteId]: false }))
   }
 
   // Latest response per athlete
@@ -110,23 +152,54 @@ export default function SpecialistView() {
       )}
 
       {!loading && displayRows.map(({ athlete, response }) => {
+        const currentStatus = physicalStatuses[athlete.id]
+        const isSaving = savingStatus[athlete.id]
+
         if (!response) {
           return (
-            <div key={athlete.id} className="card" style={{ padding: '14px 20px', color: '#888', fontStyle: 'italic' }}>
-              {athlete.last_name}, {athlete.first_name} — Aucune réponse enregistrée
+            <div key={athlete.id} className="card" style={{ padding: '14px 20px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
+                <span style={{ color: '#888', fontStyle: 'italic' }}>
+                  {athlete.last_name}, {athlete.first_name} — Aucune réponse enregistrée
+                </span>
+                <PhysicalStatusPicker
+                  athleteId={athlete.id}
+                  currentStatus={currentStatus}
+                  isSaving={isSaving}
+                  onSelect={setPhysicalStatus}
+                />
+              </div>
             </div>
           )
         }
+
         const hasAlert = ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'red')
         const hasWarning = ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'yellow')
         return (
           <div key={athlete.id} className="card" style={{ borderLeft: `4px solid ${hasAlert ? '#dc2626' : hasWarning ? '#ca8a04' : '#16a34a'}`, marginBottom: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
-              <strong style={{ fontSize: '1rem' }}>{athlete.last_name}, {athlete.first_name}</strong>
-              <span style={{ fontSize: '0.8rem', color: '#888' }}>
-                Réponse du {new Date(response.submitted_at).toLocaleDateString('fr-CA')}
-              </span>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
+              <div>
+                <strong style={{ fontSize: '1rem' }}>{athlete.last_name}, {athlete.first_name}</strong>
+                <span style={{ marginLeft: 12, fontSize: '0.8rem', color: '#888' }}>
+                  Réponse du {new Date(response.submitted_at).toLocaleDateString('fr-CA')}
+                </span>
+              </div>
+              <PhysicalStatusPicker
+                athleteId={athlete.id}
+                currentStatus={currentStatus}
+                isSaving={isSaving}
+                onSelect={setPhysicalStatus}
+              />
             </div>
+
+            {/* Statut actuel affiché */}
+            {currentStatus && (
+              <div style={{ marginBottom: 14 }}>
+                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#7c3aed', marginRight: 8 }}>Capacité physique :</span>
+                <PhysicalStatusBadge status={currentStatus} />
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
               {Object.keys(CONFIDENTIAL_LABELS).map(key => {
                 const val = response[key]
@@ -152,5 +225,40 @@ export default function SpecialistView() {
         )
       })}
     </Layout>
+  )
+}
+
+function PhysicalStatusPicker({ athleteId, currentStatus, isSaving, onSelect }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', marginRight: 4 }}>Capacité physique :</span>
+      {isSaving ? (
+        <span style={{ fontSize: '0.8rem', color: '#888' }}>Enregistrement…</span>
+      ) : (
+        PHYSICAL_STATUS_OPTIONS.map(opt => {
+          const isActive = currentStatus === opt.value
+          return (
+            <button
+              key={opt.value}
+              title={opt.label}
+              onClick={() => onSelect(athleteId, opt.value)}
+              style={{
+                background: isActive ? opt.bg : '#f9fafb',
+                border: `2px solid ${isActive ? opt.border : '#e5e7eb'}`,
+                borderRadius: 20,
+                padding: '4px 10px',
+                cursor: 'pointer',
+                fontSize: '0.78rem',
+                fontWeight: isActive ? 700 : 400,
+                color: isActive ? opt.text : '#6b7280',
+                transition: 'all 0.15s',
+              }}
+            >
+              {opt.emoji} {opt.label}
+            </button>
+          )
+        })
+      )}
+    </div>
   )
 }

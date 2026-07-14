@@ -69,7 +69,7 @@ export default function CoachDashboard() {
   async function loadTeamData(teamId) {
     setLoading(true)
     // Get athletes
-    const { data: athletes } = await supabase.from('athletes').select('id, first_name, last_name').eq('team_id', teamId).order('last_name')
+    const { data: athletes } = await supabase.from('athletes').select('id, first_name, last_name, physical_status').eq('team_id', teamId).order('last_name')
     if (!athletes || athletes.length === 0) { setAthleteData([]); setLoading(false); return }
 
     const ids = athletes.map(a => a.id)
@@ -100,7 +100,7 @@ export default function CoachDashboard() {
         if (c === 'yellow' && worst !== 'red') return 'yellow'
         return worst
       }, 'green')
-      return { athlete, last, avgs, devs, worstColor, lastDate: last?.submitted_at }
+      return { athlete, last, avgs, devs, worstColor, lastDate: last?.submitted_at, physicalStatus: athlete.physical_status || null }
     })
 
     setAthleteData(result)
@@ -222,6 +222,7 @@ export default function CoachDashboard() {
                 <tr>
                   <th style={{ minWidth: 150 }}>Athlète</th>
                   <th>État</th>
+                  <th style={{ minWidth: 120, fontSize: '0.75rem' }}>Capacité physique</th>
                   <th style={{ minWidth: 90, fontSize: '0.75rem' }}>Bien-être général</th>
                   <th>Dernière réponse</th>
                   {COACH_QUESTIONS.map(q => <th key={q} style={{ minWidth: 70, fontSize: '0.75rem' }}>{Q_LABELS[q]}</th>)}
@@ -233,13 +234,31 @@ export default function CoachDashboard() {
                     const order = { red: 0, yellow: 1, green: 2, grey: 3 }
                     return (order[a.worstColor] || 3) - (order[b.worstColor] || 3)
                   })
-                  .map(({ athlete, devs, worstColor, lastDate }) => (
+                  .map(({ athlete, last, devs, worstColor, lastDate, physicalStatus }) => (
                     <tr key={athlete.id} className={worstColor === 'red' ? 'row-red' : worstColor === 'yellow' ? 'row-yellow' : ''}>
                       <td style={{ fontWeight: 600 }}>{athlete.last_name}, {athlete.first_name}</td>
                       <td>
                         <span className={`badge-${worstColor}`}>
                           {worstColor === 'red' ? '🔴 Alerte' : worstColor === 'yellow' ? '🟡 Attention' : worstColor === 'green' ? '🟢 OK' : '—'}
                         </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {physicalStatus === 'red' && (
+                          <span style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            🔴 Aucune pratique
+                          </span>
+                        )}
+                        {physicalStatus === 'yellow' && (
+                          <span style={{ background: '#fef9c3', color: '#854d0e', border: '1px solid #ca8a04', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            🟡 Avec restrictions
+                          </span>
+                        )}
+                        {physicalStatus === 'green' && (
+                          <span style={{ background: '#dcfce7', color: '#166534', border: '1px solid #16a34a', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            🟢 Sans restriction
+                          </span>
+                        )}
+                        {!physicalStatus && <span style={{ color: '#999', fontSize: '0.8rem' }}>—</span>}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {(() => {
