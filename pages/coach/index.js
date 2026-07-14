@@ -38,6 +38,8 @@ export default function CoachDashboard() {
   const [allQuestions, setAllQuestions] = useState([])
   const [coachConfig, setCoachConfig] = useState([]) // active question_ids
   const [loading, setLoading] = useState(false)
+  const [newQ, setNewQ] = useState({ label: '', section: 'entrainement', input_type: 'textarea', min_val: 1, max_val: 10, options: [''] })
+  const [newQMsg, setNewQMsg] = useState('')
 
   useEffect(() => {
     const u = getSession()
@@ -113,6 +115,42 @@ export default function CoachDashboard() {
   async function loadCoachConfig(coachId) {
     const { data } = await supabase.from('coach_journal_config').select('question_id, is_active, display_order').eq('coach_id', coachId)
     setCoachConfig((data || []).filter(c => c.is_active).map(c => c.question_id))
+  }
+
+  async function createQuestion(e) {
+    e.preventDefault()
+    if (!newQ.label.trim()) return
+    setNewQMsg('')
+    const opts = ['radio','checkbox'].includes(newQ.input_type)
+      ? newQ.options.filter(o => o.trim())
+      : null
+    const { data: q, error } = await supabase
+      .from('journal_questions')
+      .insert([{
+        created_by: user.id,
+        section: newQ.section,
+        label: newQ.label.trim(),
+        input_type: newQ.input_type,
+        min_val: newQ.input_type === 'slider' ? parseInt(newQ.min_val) : null,
+        max_val: newQ.input_type === 'slider' ? parseInt(newQ.max_val) : null,
+        options: opts ? JSON.stringify(opts) : null,
+        is_predefined: false,
+      }])
+      .select()
+      .single()
+    if (error) { setNewQMsg('❌ Erreur: ' + error.message); return }
+    // Auto-activer pour ce coach
+    await saveCoachConfig(q.id, true)
+    await loadAllQuestions()
+    setNewQ({ label: '', section: 'entrainement', input_type: 'textarea', min_val: 1, max_val: 10, options: [''] })
+    setNewQMsg('✅ Question créée et activée.')
+  }
+
+  async function deleteQuestion(qId) {
+    if (!confirm('Supprimer cette question?')) return
+    await supabase.from('journal_questions').delete().eq('id', qId)
+    setCoachConfig(prev => prev.filter(id => id !== qId))
+    await loadAllQuestions()
   }
 
   async function saveCoachConfig(qId, active) {
@@ -245,30 +283,122 @@ export default function CoachDashboard() {
 
       {/* ── TAB: CONFIG QUESTIONS ── */}
       {tab === 'config' && (
-        <div className="card">
-          <h3 style={{ marginBottom: 16, color: '#1a3a5c' }}>Questions actives dans le journal de tes athlètes</h3>
-          <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: 20 }}>
-            Coche les questions à inclure. Les athlètes de tes équipes verront ces questions dans leur journal hebdomadaire.
-          </p>
-          {groupBySection(allQuestions).map(([section, qs]) => (
-            <div key={section} style={{ marginBottom: 20 }}>
-              <div style={{ fontWeight: 700, color: '#1a3a5c', marginBottom: 10, fontSize: '0.9rem' }}>{sectionLabel(section)}</div>
-              {qs.map(q => (
-                <label key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10, cursor: 'pointer' }}>
-                  <input
-                    type="checkbox"
-                    checked={coachConfig.includes(q.id)}
-                    onChange={e => saveCoachConfig(q.id, e.target.checked)}
-                    style={{ marginTop: 2, accentColor: '#1a3a5c' }}
-                  />
-                  <div>
-                    <div style={{ fontSize: '0.9rem' }}>{q.label}</div>
-                    <div style={{ fontSize: '0.75rem', color: '#888', marginTop: 2 }}>{q.input_type}</div>
+        <div>
+          {/* Créer une nouvelle question */}
+          <div className="card" style={{ marginBottom: 20 }}>
+            <h3 style={{ marginBottom: 16, color: '#1a3a5c' }}>Créer une nouvelle question</h3>
+            {newQMsg && <div className={`alert ${newQMsg.startsWith('✅') ? 'alert-success' : 'alert-error'}`}>{newQMsg}</div>}
+            <form onSubmit={createQuestion}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 12 }}>
+                <div className="form-group" style={{ margin: 0, gridColumn: '1 / -1' }}>
+                  <label>Libellé de la question *</label>
+                  <input type="text" value={newQ.label} onChange={e => setNewQ({ ...newQ, label: e.target.value })} placeholder="Ex: Combien d'heures as-tu dormi?" required />
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Section</label>
+                  <select value={newQ.section} onChange={e => setNewQ({ ...newQ, section: e.target.value })}>
+                    <option value="entrainement">🏋️ Entraînement</option>
+                    <option value="recuperation">💤 Récupération</option>
+                    <option value="objectifs">🎯 Objectifs</option>
+                    <option value="reflexion">🪞 Réflexion</option>
+                    <option value="coach">💬 Message entraîneur</option>
+                  </select>
+                </div>
+                <div className="form-group" style={{ margin: 0 }}>
+                  <label>Type de réponse</label>
+                  <select value={newQ.input_type} onChange={e => setNewQ({ ...newQ, input_type: e.target.value, options: [''] })}>
+                    <option value="textarea">Texte libre</option>
+                    <option value="radio">Choix de réponse (un seul)</option>
+                    <option value="checkbox">Réponses multiples</option>
+                    <option value="slider">Curseur (slider)</option>
+                    <option value="number">Nombre</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Options pour radio/checkbox */}
+              {['radio','checkbox'].includes(newQ.input_type) && (
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontWeight: 600, display: 'block', marginBottom: 8 }}>Options de réponse</label>
+                  {newQ.options.map((opt, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                      <input
+                        type="text"
+                        value={opt}
+                        onChange={e => {
+                          const opts = [...newQ.options]
+                          opts[i] = e.target.value
+                          setNewQ({ ...newQ, options: opts })
+                        }}
+                        placeholder={`Option ${i + 1}`}
+                        style={{ flex: 1 }}
+                      />
+                      {newQ.options.length > 1 && (
+                        <button type="button" className="btn btn-danger" style={{ padding: '6px 12px' }}
+                          onClick={() => setNewQ({ ...newQ, options: newQ.options.filter((_, idx) => idx !== i) })}>
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="btn btn-outline" style={{ marginTop: 4, fontSize: '0.85rem' }}
+                    onClick={() => setNewQ({ ...newQ, options: [...newQ.options, ''] })}>
+                    + Ajouter une option
+                  </button>
+                </div>
+              )}
+
+              {/* Min/max pour slider */}
+              {newQ.input_type === 'slider' && (
+                <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                    <label>Minimum</label>
+                    <input type="number" value={newQ.min_val} onChange={e => setNewQ({ ...newQ, min_val: e.target.value })} />
                   </div>
-                </label>
-              ))}
-            </div>
-          ))}
+                  <div className="form-group" style={{ margin: 0, flex: 1 }}>
+                    <label>Maximum</label>
+                    <input type="number" value={newQ.max_val} onChange={e => setNewQ({ ...newQ, max_val: e.target.value })} />
+                  </div>
+                </div>
+              )}
+
+              <button type="submit" className="btn btn-primary">Créer et activer la question</button>
+            </form>
+          </div>
+
+          {/* Liste des questions existantes */}
+          <div className="card">
+            <h3 style={{ marginBottom: 8, color: '#1a3a5c' }}>Questions actives</h3>
+            <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: 20 }}>Coche les questions à inclure dans le journal de tes athlètes.</p>
+            {groupBySection(allQuestions).map(([section, qs]) => (
+              <div key={section} style={{ marginBottom: 20 }}>
+                <div style={{ fontWeight: 700, color: '#1a3a5c', marginBottom: 10, fontSize: '0.9rem' }}>{sectionLabel(section)}</div>
+                {qs.map(q => (
+                  <div key={q.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, marginBottom: 10 }}>
+                    <input
+                      type="checkbox"
+                      checked={coachConfig.includes(q.id)}
+                      onChange={e => saveCoachConfig(q.id, e.target.checked)}
+                      style={{ marginTop: 4, accentColor: '#1a3a5c', flexShrink: 0 }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: '0.9rem' }}>{q.label}</div>
+                      <div style={{ fontSize: '0.75rem', color: '#888', marginTop: 2 }}>
+                        {q.input_type === 'radio' ? 'Choix de réponse' : q.input_type === 'checkbox' ? 'Réponses multiples' : q.input_type === 'slider' ? 'Curseur' : q.input_type === 'number' ? 'Nombre' : 'Texte libre'}
+                        {q.is_predefined ? ' · Prédéfinie' : ' · Personnalisée'}
+                      </div>
+                    </div>
+                    {!q.is_predefined && (
+                      <button className="btn btn-danger" style={{ padding: '3px 10px', fontSize: '0.75rem', flexShrink: 0 }}
+                        onClick={() => deleteQuestion(q.id)}>
+                        Supprimer
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </Layout>
