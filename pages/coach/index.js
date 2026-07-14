@@ -4,7 +4,7 @@ import Layout from '../../components/Layout'
 import { supabase } from '../../lib/supabase'
 import { getSession } from '../../lib/auth'
 
-// Questions non-confidentielles pour le tableau coach
+// Questions non-confidentielles pour le tableau coach (écart par rapport à la moyenne)
 const COACH_QUESTIONS = ['q_a','q_b','q_c','q_d','q_e','q_f','q_g','q_h','q_i','q_j','q_k','q_l','q_m','q_n','q_o','q_p']
 const Q_LABELS = {
   q_a:'Motivation A',q_b:'Motivation B',q_c:'Motivation C',q_d:'Motivation D',
@@ -12,6 +12,15 @@ const Q_LABELS = {
   q_i:'Nutrition A',q_j:'Nutrition B',q_k:'Nutrition C',q_l:'Nutrition D',
   q_m:'Nutrition E',q_n:'Nutrition F',q_o:'Nutrition G',q_p:'Nutrition H',
 }
+
+// Couleur basée sur le score brut de q_general (1-5)
+function generalColor(val) {
+  if (val == null) return { bg: 'transparent', text: '#999' }
+  if (val <= 2) return { bg: '#fee2e2', text: '#991b1b' }
+  if (val === 3) return { bg: '#fef9c3', text: '#854d0e' }
+  return { bg: '#dcfce7', text: '#166534' }
+}
+const GENERAL_LABELS = { 1: 'Très mal', 2: 'Mal', 3: 'Moyen', 4: 'Bien', 5: 'Très bien' }
 
 function deviation(last, avg) {
   if (last == null || avg == null) return null
@@ -213,6 +222,7 @@ export default function CoachDashboard() {
                 <tr>
                   <th style={{ minWidth: 150 }}>Athlète</th>
                   <th>État</th>
+                  <th style={{ minWidth: 90, fontSize: '0.75rem' }}>Bien-être général</th>
                   <th>Dernière réponse</th>
                   {COACH_QUESTIONS.map(q => <th key={q} style={{ minWidth: 70, fontSize: '0.75rem' }}>{Q_LABELS[q]}</th>)}
                 </tr>
@@ -230,6 +240,17 @@ export default function CoachDashboard() {
                         <span className={`badge-${worstColor}`}>
                           {worstColor === 'red' ? '🔴 Alerte' : worstColor === 'yellow' ? '🟡 Attention' : worstColor === 'green' ? '🟢 OK' : '—'}
                         </span>
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {(() => {
+                          const val = last?.q_general
+                          const c = generalColor(val)
+                          return val != null
+                            ? <span style={{ background: c.bg, color: c.text, padding: '3px 8px', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700 }}>
+                                {GENERAL_LABELS[val]}
+                              </span>
+                            : <span style={{ color: '#999' }}>—</span>
+                        })()}
                       </td>
                       <td style={{ fontSize: '0.8rem', color: '#888' }}>
                         {lastDate ? new Date(lastDate).toLocaleDateString('fr-CA') : '—'}

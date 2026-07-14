@@ -70,17 +70,29 @@ const SECTIONS = [
   },
 ]
 
+function getMonday(d = new Date()) {
+  const date = new Date(d)
+  const day = date.getDay()
+  const diff = (day === 0 ? -6 : 1 - day)
+  date.setDate(date.getDate() + diff)
+  return date.toISOString().split('T')[0]
+}
+
+const NON_CONFIDENTIAL_KEYS = ['q_general','q_a','q_b','q_c','q_d','q_e','q_f','q_g','q_h','q_i','q_j','q_k','q_l','q_m','q_n','q_o','q_p']
+
 export default function Questionnaire() {
-  const [step, setStep] = useState('select') // 'select' | 'pin' | 'form' | 'done'
+  const [step, setStep] = useState('select') // 'select' | 'pin' | 'check' | 'already' | 'form' | 'history' | 'done'
   const [teams, setTeams] = useState([])
   const [athletes, setAthletes] = useState([])
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedAthlete, setSelectedAthlete] = useState('')
   const [pendingAthlete, setPendingAthlete] = useState(null)
+  const [history, setHistory] = useState([])
   const [answers, setAnswers] = useState({})
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const weekStart = getMonday()
 
   async function loadTeams() {
     const { data } = await supabase.from('teams').select('id, name').order('name')
@@ -94,6 +106,29 @@ export default function Questionnaire() {
       .eq('team_id', teamId)
       .order('last_name')
     setAthletes(data || [])
+  }
+
+  async function loadHistory(athleteId) {
+    const { data } = await supabase
+      .from('responses')
+      .select('*')
+      .eq('athlete_id', athleteId)
+      .order('submitted_at', { ascending: false })
+      .limit(10)
+    return data || []
+  }
+
+  async function onPinSuccess() {
+    setLoading(true)
+    const hist = await loadHistory(parseInt(selectedAthlete))
+    setHistory(hist)
+    setLoading(false)
+    const thisWeek = hist.find(r => r.submitted_at?.startsWith(weekStart) || (r.submitted_at && new Date(r.submitted_at) >= new Date(weekStart)))
+    if (thisWeek) {
+      setStep('already')
+    } else {
+      setStep('form')
+    }
   }
 
   useState(() => { loadTeams() }, [])
@@ -196,9 +231,41 @@ export default function Questionnaire() {
         {step === 'pin' && pendingAthlete && (
           <PinGate
             athlete={pendingAthlete}
-            onSuccess={() => setStep('form')}
+            onSuccess={onPinSuccess}
             onBack={() => { setStep('select'); setPendingAthlete(null); setSelectedAthlete('') }}
           />
+        )}
+
+        {/* Déjà soumis cette semaine */}
+        {step === 'already' && (
+          <div style={{ padding: '28px 24px', textAlign: 'center' }}>
+            <div style={{ fontSize: 48, marginBottom: 12 }}>✅</div>
+            <h3 style={{ color: '#1a3a5c', marginBottom: 8 }}>Tu as déjà rempli ton questionnaire cette semaine!</h3>
+            <p style={{ color: '#6b7280', marginBottom: 24, fontSize: '0.9rem' }}>
+              Semaine du {weekStart}
+            </p>
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button className="btn btn-primary" onClick={() => setStep('history')}>
+                Voir mon historique
+              </button>
+              <button className="btn btn-outline" onClick={() => { setStep('select'); setSelectedAthlete(''); setPendingAthlete(null) }}>
+                Retour
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Historique questionnaire */}
+        {step === 'history' && (
+          <div style={{ padding: 24 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h3 style={{ color: '#1a3a5c' }}>Mon historique — {pendingAthlete?.first_name}</h3>
+              <button className="btn btn-outline" onClick={() => setStep('already')}>Retour</button>
+            </div>
+            {history.map(r => (
+              <QuestionnaireHistoryCard key={r.id} response={r} />
+            ))}
+          </div>
         )}
 
         {/* Questions */}
@@ -273,6 +340,83 @@ function ScaleInput({ question, value, onChange }) {
           </span>
         </label>
       ))}
+    </div>
+  )
+}
+
+function generalColor(val) {
+  if (val == null) return '#e5e7eb'
+  if (val <= 2) return '#fee2e2'  // rouge
+  if (val === 3) return '#fef9c3' // jaune
+  return '#dcfce7'                // vert
+}
+
+function generalColorText(val) {
+  if (val == null) return '#6b7280'
+  if (val <= 2) return '#991b1b'
+  if (val === 3) return '#854d0e'
+  return '#166534'
+}
+
+const GENERAL_LABELS = ['', 'Très mal', 'Mal', 'Moyen', 'Bien', 'Très bien']
+
+const SECTION_KEYS = {
+  'Motivation': ['q_a','q_b','q_c','q_d'],
+  'Sommeil': ['q_e'],
+  'Conciliation': ['q_f'],
+  'Anxiété': ['q_g'],
+  'Social': ['q_h'],
+  'Nutrition': ['q_i','q_j','q_k','q_l','q_m','q_n','q_o','q_p'],
+}
+
+function QuestionnaireHistoryCard({ response }) {
+  const [open, setOpen] = useState(false)
+  const date = new Date(response.submitted_at).toLocaleDateString('fr-CA')
+  const generalVal = response.q_general
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
+      <div
+        style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: open ? '#f0f7ff' : '#fff' }}
+        onClick={() => setOpen(!open)}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <strong>{date}</strong>
+          {generalVal && (
+            <span style={{
+              background: generalColor(generalVal),
+              color: generalColorText(generalVal),
+              padding: '2px 10px', borderRadius: 20, fontSize: '0.8rem', fontWeight: 700
+            }}>
+              {GENERAL_LABELS[generalVal]}
+            </span>
+          )}
+        </div>
+        <span style={{ color: '#6b7280' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', fontSize: '0.88rem' }}>
+          {Object.entries(SECTION_KEYS).map(([section, keys]) => (
+            <div key={section} style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', marginBottom: 6 }}>{section}</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {keys.map(k => (
+                  <div key={k} style={{ background: '#f9fafb', borderRadius: 8, padding: '6px 12px', fontSize: '0.85rem' }}>
+                    <span style={{ color: '#6b7280', fontSize: '0.75rem' }}>{k.toUpperCase()} </span>
+                    <strong>{response[k] ?? '—'}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+          {response.comment && (
+            <div style={{ marginTop: 12, background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', marginBottom: 4 }}>Commentaire</div>
+              <div>{response.comment}</div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
