@@ -350,11 +350,37 @@ function QuestionInput({ q, value, onChange }) {
 
 function HistoryCard({ entry }) {
   const [open, setOpen] = useState(false)
+  const [responses, setResponses] = useState(entry.journal_responses || [])
+  const [loadingResp, setLoadingResp] = useState(false)
+
+  async function handleOpen() {
+    const next = !open
+    setOpen(next)
+    // Recharge les réponses depuis la DB à chaque ouverture pour éviter les données périmées
+    if (next && entry.id) {
+      setLoadingResp(true)
+      const { data } = await supabase
+        .from('journal_responses')
+        .select('*, journal_questions(label, section)')
+        .eq('entry_id', entry.id)
+        .order('id')
+      setResponses(data || [])
+      setLoadingResp(false)
+    }
+  }
+
+  function displayValue(r) {
+    if (r.value_text) return r.value_text
+    if (r.value_number != null) return String(r.value_number)
+    if (r.value_array && r.value_array.length > 0) return r.value_array.join(', ')
+    return '—'
+  }
+
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 12, overflow: 'hidden' }}>
       <div
         style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: open ? '#f0f7ff' : '#fff' }}
-        onClick={() => setOpen(!open)}
+        onClick={handleOpen}
       >
         <div>
           <strong>Semaine du {entry.week_start}</strong>
@@ -364,17 +390,37 @@ function HistoryCard({ entry }) {
       </div>
       {open && (
         <div style={{ padding: '16px', borderTop: '1px solid #e5e7eb', fontSize: '0.88rem' }}>
-          {entry.journal_responses?.map(r => (
-            <div key={r.id} style={{ marginBottom: 10 }}>
-              <div style={{ fontWeight: 600, color: '#555', fontSize: '0.8rem' }}>{r.journal_questions?.label}</div>
-              <div style={{ color: '#1a1a1a', marginTop: 2 }}>
-                {r.value_text || (r.value_number != null ? r.value_number : (r.value_array || []).join(', '))}
+          {loadingResp && <p style={{ color: '#888', marginBottom: 10 }}>Chargement…</p>}
+
+          {/* Réponses de l'athlète */}
+          {responses.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 10 }}>
+                Tes réponses
               </div>
+              {responses.map(r => (
+                <div key={r.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #f3f4f6' }}>
+                  <div style={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}>
+                    {r.journal_questions?.label || 'Question'}
+                  </div>
+                  <div style={{ color: '#1a1a1a', marginTop: 4 }}>
+                    {displayValue(r)}
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
+          )}
+
+          {responses.length === 0 && !loadingResp && (
+            <p style={{ color: '#9ca3af', fontSize: '0.85rem', marginBottom: 12 }}>Aucune réponse enregistrée.</p>
+          )}
+
+          {/* Réponse du coach */}
           {entry.coach_response && (
-            <div style={{ marginTop: 16, background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '12px 14px' }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#16a34a', marginBottom: 4 }}>Message de ton entraîneur</div>
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#16a34a', marginBottom: 4 }}>
+                💬 Message de ton entraîneur
+              </div>
               <div>{entry.coach_response}</div>
             </div>
           )}
