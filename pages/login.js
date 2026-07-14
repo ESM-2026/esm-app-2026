@@ -31,8 +31,8 @@ export default function Login() {
       if (user.role === 'admin') router.push('/admin')
       else if (user.role === 'coach') router.push('/coach')
       else if (user.role === 'specialist') router.push('/specialist')
-    } catch {
-      setError('Erreur de connexion. Vérifiez vos identifiants.')
+    } catch (err) {
+      setError('Erreur: ' + (err?.message || JSON.stringify(err)))
     }
     setLoading(false)
   }
