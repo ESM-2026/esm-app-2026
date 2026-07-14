@@ -351,7 +351,7 @@ function HistoryCard({ entry }) {
             <div key={r.id} style={{ marginBottom: 10 }}>
               <div style={{ fontWeight: 600, color: '#555', fontSize: '0.8rem' }}>{r.journal_questions?.label}</div>
               <div style={{ color: '#1a1a1a', marginTop: 2 }}>
-                {r.value_text || r.value_number ?? (r.value_array || []).join(', ')}
+                {r.value_text || (r.value_number != null ? r.value_number : (r.value_array || []).join(', '))}
               </div>
             </div>
           ))}

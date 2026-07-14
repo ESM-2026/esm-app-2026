@@ -299,7 +299,7 @@ function JournalCard({ entry, replyText, onReplyChange, onSendReply }) {
               <div key={r.id} style={{ marginBottom: 12 }}>
                 <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#6b7280' }}>{r.journal_questions?.section?.toUpperCase()} · {r.journal_questions?.label}</div>
                 <div style={{ marginTop: 3, color: '#1a1a1a' }}>
-                  {r.value_text || r.value_number ?? (r.value_array || []).join(', ') || '—'}
+                  {r.value_text || (r.value_number != null ? r.value_number : (r.value_array || []).join(', ')) || '—'}
                 </div>
               </div>
             ))}
