@@ -86,8 +86,9 @@ export default function CoachDashboard() {
 
     // Compute last + avg per athlete
     const result = athletes.map(athlete => {
-      const recs = responses.filter(r => r.athlete_id === athlete.id)
-      const last = recs.length > 0 ? recs[recs.length - 1] : null
+      const recs = (responses || []).filter(r => r.athlete_id === athlete.id)
+      const hasResponses = recs.length > 0
+      const last = hasResponses ? recs[recs.length - 1] : null
       const avgs = {}
       COACH_QUESTIONS.forEach(q => {
         const vals = recs.map(r => r[q]).filter(v => v != null)
@@ -97,13 +98,14 @@ export default function CoachDashboard() {
       COACH_QUESTIONS.forEach(q => {
         devs[q] = deviation(last?.[q], avgs[q])
       })
-      const worstColor = COACH_QUESTIONS.reduce((worst, q) => {
+      // 'none' = jamais répondu — placé en bas de liste, pas de couleur
+      const worstColor = !hasResponses ? 'none' : COACH_QUESTIONS.reduce((worst, q) => {
         const c = devColor(devs[q])
         if (c === 'red') return 'red'
         if (c === 'yellow' && worst !== 'red') return 'yellow'
         return worst
       }, 'green')
-      return { athlete, last, avgs, devs, worstColor, lastDate: last?.submitted_at, physicalStatus: athlete.physical_status || null, physicalNote: athlete.physical_status_note || null }
+      return { athlete, last, avgs, devs, worstColor, hasResponses, lastDate: last?.submitted_at, physicalStatus: athlete.physical_status || null, physicalNote: athlete.physical_status_note || null }
     })
 
     setAthleteData(result)
@@ -282,7 +284,7 @@ export default function CoachDashboard() {
       {tab === 'sante' && (
         <div className="card" style={{ padding: 0, overflowX: 'auto' }}>
           {loading && <p style={{ padding: 20, color: '#888' }}>Chargement…</p>}
-          {!loading && athleteData.length === 0 && selectedTeam && <p style={{ padding: 20 }}>Aucun athlète ou aucune réponse pour cette équipe.</p>}
+          {!loading && athleteData.length === 0 && selectedTeam && <p style={{ padding: 20 }}>Aucun athlète dans cette équipe.</p>}
           {!selectedTeam && teams.length > 1 && <p style={{ padding: 20, color: '#888' }}>Sélectionnez une équipe.</p>}
           {athleteData.length > 0 && (
             <table>
@@ -299,16 +301,19 @@ export default function CoachDashboard() {
               <tbody>
                 {athleteData
                   .sort((a, b) => {
-                    const order = { red: 0, yellow: 1, green: 2, grey: 3 }
-                    return (order[a.worstColor] || 3) - (order[b.worstColor] || 3)
+                    const order = { red: 0, yellow: 1, green: 2, grey: 3, none: 4 }
+                    return (order[a.worstColor] ?? 4) - (order[b.worstColor] ?? 4)
                   })
-                  .map(({ athlete, last, devs, worstColor, lastDate, physicalStatus, physicalNote }) => (
+                  .map(({ athlete, last, devs, worstColor, hasResponses, lastDate, physicalStatus, physicalNote }) => (
                     <tr key={athlete.id} className={worstColor === 'red' ? 'row-red' : worstColor === 'yellow' ? 'row-yellow' : ''}>
                       <td style={{ fontWeight: 600 }}>{athlete.last_name}, {athlete.first_name}</td>
                       <td>
-                        <span className={`badge-${worstColor}`}>
-                          {worstColor === 'red' ? '🔴 Alerte' : worstColor === 'yellow' ? '🟡 Attention' : worstColor === 'green' ? '🟢 OK' : '—'}
-                        </span>
+                        {worstColor === 'none'
+                          ? <span style={{ fontSize: '0.78rem', color: '#9ca3af', fontStyle: 'italic' }}>Non complété</span>
+                          : <span className={`badge-${worstColor}`}>
+                              {worstColor === 'red' ? '🔴 Alerte' : worstColor === 'yellow' ? '🟡 Attention' : '🟢 OK'}
+                            </span>
+                        }
                       </td>
                       <td style={{ textAlign: 'center', minWidth: 140 }}>
                         {physicalStatus === 'red' && (
@@ -390,16 +395,58 @@ export default function CoachDashboard() {
             <button className={`btn ${journalFilter === 'all' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setJournalFilter('all')}>Tous</button>
             <button className={`btn ${journalFilter === 'unread' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setJournalFilter('unread')}>Sans réponse</button>
           </div>
-          {filteredEntries.length === 0 && <p style={{ color: '#888' }}>Aucun journal trouvé.</p>}
-          {filteredEntries.map(entry => (
-            <JournalCard
-              key={entry.id}
-              entry={entry}
-              replyText={replyText[entry.id] || ''}
-              onReplyChange={t => setReplyText(prev => ({ ...prev, [entry.id]: t }))}
-              onSendReply={() => sendReply(entry.id)}
-            />
-          ))}
+
+          {athleteData.length === 0 && <p style={{ color: '#888' }}>Aucun athlète dans cette équipe.</p>}
+
+          {athleteData
+            .slice()
+            .sort((a, b) => a.athlete.last_name.localeCompare(b.athlete.last_name))
+            .map(({ athlete }) => {
+              // Entrées de cet athlète selon le filtre
+              const allEntries = journalEntries.filter(e => e.athlete_id === athlete.id)
+              const visibleEntries = journalFilter === 'unread'
+                ? allEntries.filter(e => !e.coach_response)
+                : allEntries
+              const hasAny = allEntries.length > 0
+              const hasVisible = visibleEntries.length > 0
+
+              return (
+                <div key={athlete.id} style={{ marginBottom: 12 }}>
+                  {/* En-tête athlète */}
+                  <div style={{
+                    background: '#f0f4f8',
+                    borderRadius: hasVisible ? '10px 10px 0 0' : 10,
+                    padding: '10px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}>
+                    <strong style={{ color: '#1a3a5c' }}>{athlete.last_name}, {athlete.first_name}</strong>
+                    <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>
+                      {!hasAny
+                        ? <em>Non complété</em>
+                        : journalFilter === 'unread' && !hasVisible
+                          ? <em style={{ color: '#16a34a' }}>✓ Tous répondus</em>
+                          : `${allEntries.length} entrée${allEntries.length > 1 ? 's' : ''}`
+                      }
+                    </span>
+                  </div>
+
+                  {/* Entrées visibles */}
+                  {visibleEntries.map(entry => (
+                    <JournalCard
+                      key={entry.id}
+                      entry={entry}
+                      replyText={replyText[entry.id] || ''}
+                      onReplyChange={t => setReplyText(prev => ({ ...prev, [entry.id]: t }))}
+                      onSendReply={() => sendReply(entry.id)}
+                      nested
+                    />
+                  ))}
+                </div>
+              )
+            })
+          }
         </div>
       )}
 
