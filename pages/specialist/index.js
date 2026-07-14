@@ -25,9 +25,9 @@ function flag(key, value) {
 }
 
 const PHYSICAL_STATUS_OPTIONS = [
-  { value: 'red',    emoji: '🔴', label: 'Aucune pratique',         bg: '#fee2e2', border: '#dc2626', text: '#991b1b' },
+  { value: 'red',    emoji: '🔴', label: 'Aucune pratique',            bg: '#fee2e2', border: '#dc2626', text: '#991b1b' },
   { value: 'yellow', emoji: '🟡', label: 'Pratique avec restrictions', bg: '#fef9c3', border: '#ca8a04', text: '#854d0e' },
-  { value: 'green',  emoji: '🟢', label: 'Aucune restriction',       bg: '#dcfce7', border: '#16a34a', text: '#166534' },
+  { value: 'green',  emoji: '🟢', label: 'Aucune restriction',         bg: '#dcfce7', border: '#16a34a', text: '#166534' },
 ]
 
 function PhysicalStatusBadge({ status }) {
@@ -50,7 +50,9 @@ export default function SpecialistView() {
   const [filter, setFilter] = useState('all')
   const [loading, setLoading] = useState(false)
   const [physicalStatuses, setPhysicalStatuses] = useState({}) // {athleteId: status}
-  const [savingStatus, setSavingStatus] = useState({}) // {athleteId: bool}
+  const [physicalNotes, setPhysicalNotes] = useState({})       // {athleteId: note text}
+  const [savingStatus, setSavingStatus] = useState({})         // {athleteId: bool}
+  const [noteSaved, setNoteSaved] = useState({})               // {athleteId: bool} feedback
 
   useEffect(() => {
     const u = getSession()
@@ -65,21 +67,22 @@ export default function SpecialistView() {
     setLoading(true)
     const { data: ath } = await supabase
       .from('athletes')
-      .select('id, first_name, last_name, physical_status')
+      .select('id, first_name, last_name, physical_status, physical_status_note')
       .eq('team_id', teamId)
       .order('last_name')
     setAthletes(ath || [])
 
-    // Initialiser les statuts depuis la DB
     const statusMap = {}
+    const noteMap = {}
     for (const a of (ath || [])) {
       statusMap[a.id] = a.physical_status || null
+      noteMap[a.id] = a.physical_status_note || ''
     }
     setPhysicalStatuses(statusMap)
+    setPhysicalNotes(noteMap)
 
     if (!ath || ath.length === 0) { setLoading(false); return }
 
-    // Charger les réponses confidentielles seulement si autorisé
     if (user?.can_view_confidential) {
       const { data: recs } = await supabase
         .from('responses')
@@ -98,15 +101,30 @@ export default function SpecialistView() {
 
   async function setPhysicalStatus(athleteId, status) {
     setSavingStatus(prev => ({ ...prev, [athleteId]: true }))
-    const newStatus = physicalStatuses[athleteId] === status ? null : status // toggle off si déjà sélectionné
-    const { error } = await supabase
-      .from('athletes')
-      .update({ physical_status: newStatus })
-      .eq('id', athleteId)
+    const newStatus = physicalStatuses[athleteId] === status ? null : status
+    // Si on passe au vert ou on efface, effacer aussi la note
+    const clearNote = newStatus === 'green' || newStatus === null
+    const updateData = { physical_status: newStatus }
+    if (clearNote) updateData.physical_status_note = null
+
+    const { error } = await supabase.from('athletes').update(updateData).eq('id', athleteId)
     if (!error) {
       setPhysicalStatuses(prev => ({ ...prev, [athleteId]: newStatus }))
+      if (clearNote) setPhysicalNotes(prev => ({ ...prev, [athleteId]: '' }))
     }
     setSavingStatus(prev => ({ ...prev, [athleteId]: false }))
+  }
+
+  async function saveNote(athleteId) {
+    const note = physicalNotes[athleteId] || ''
+    const { error } = await supabase
+      .from('athletes')
+      .update({ physical_status_note: note || null })
+      .eq('id', athleteId)
+    if (!error) {
+      setNoteSaved(prev => ({ ...prev, [athleteId]: true }))
+      setTimeout(() => setNoteSaved(prev => ({ ...prev, [athleteId]: false })), 2000)
+    }
   }
 
   // Latest response per athlete
@@ -156,37 +174,22 @@ export default function SpecialistView() {
       </div>
 
       {loading && <p style={{ color: '#888' }}>Chargement…</p>}
-
       {!loading && selectedTeam && displayRows.length === 0 && (
-        <p style={{ color: '#888' }}>Aucun athlète ou aucune réponse pour cette sélection.</p>
+        <p style={{ color: '#888' }}>Aucun athlète pour cette sélection.</p>
       )}
 
       {!loading && displayRows.map(({ athlete, response }) => {
         const currentStatus = physicalStatuses[athlete.id]
         const isSaving = savingStatus[athlete.id]
+        const note = physicalNotes[athlete.id] || ''
+        const showNoteField = currentStatus === 'red' || currentStatus === 'yellow'
+        const hasAlert = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response?.[k]) === 'red')
+        const hasWarning = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response?.[k]) === 'yellow')
 
-        if (!response) {
-          return (
-            <div key={athlete.id} className="card" style={{ padding: '14px 20px', marginBottom: 14 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
-                <span style={{ color: '#888', fontStyle: 'italic' }}>
-                  {athlete.last_name}, {athlete.first_name} — Aucune réponse enregistrée
-                </span>
-                <PhysicalStatusPicker
-                  athleteId={athlete.id}
-                  currentStatus={currentStatus}
-                  isSaving={isSaving}
-                  onSelect={setPhysicalStatus}
-                />
-              </div>
-            </div>
-          )
-        }
-
-        const hasAlert = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'red')
-        const hasWarning = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'yellow')
         return (
           <div key={athlete.id} className="card" style={{ borderLeft: `4px solid ${hasAlert ? '#dc2626' : hasWarning ? '#ca8a04' : '#16a34a'}`, marginBottom: 14 }}>
+
+            {/* En-tête athlète */}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <strong style={{ fontSize: '1rem' }}>{athlete.last_name}, {athlete.first_name}</strong>
@@ -195,20 +198,83 @@ export default function SpecialistView() {
                     Réponse du {new Date(response.submitted_at).toLocaleDateString('fr-CA')}
                   </span>
                 )}
+                {!response && (
+                  <span style={{ marginLeft: 12, fontSize: '0.8rem', color: '#bbb', fontStyle: 'italic' }}>Aucune réponse enregistrée</span>
+                )}
               </div>
-              <PhysicalStatusPicker
-                athleteId={athlete.id}
-                currentStatus={currentStatus}
-                isSaving={isSaving}
-                onSelect={setPhysicalStatus}
-              />
+
+              {/* Boutons statut */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280' }}>Capacité physique :</span>
+                {isSaving ? (
+                  <span style={{ fontSize: '0.8rem', color: '#888' }}>Enregistrement…</span>
+                ) : (
+                  PHYSICAL_STATUS_OPTIONS.map(opt => {
+                    const isActive = currentStatus === opt.value
+                    return (
+                      <button
+                        key={opt.value}
+                        title={opt.label}
+                        onClick={() => setPhysicalStatus(athlete.id, opt.value)}
+                        style={{
+                          background: isActive ? opt.bg : '#f9fafb',
+                          border: `2px solid ${isActive ? opt.border : '#e5e7eb'}`,
+                          borderRadius: 20,
+                          padding: '4px 10px',
+                          cursor: 'pointer',
+                          fontSize: '0.78rem',
+                          fontWeight: isActive ? 700 : 400,
+                          color: isActive ? opt.text : '#6b7280',
+                          transition: 'all 0.15s',
+                        }}
+                      >
+                        {opt.emoji} {opt.label}
+                      </button>
+                    )
+                  })
+                )}
+              </div>
             </div>
 
-            {/* Statut actuel affiché */}
-            {currentStatus && (
-              <div style={{ marginBottom: 14 }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: '#7c3aed', marginRight: 8 }}>Capacité physique :</span>
-                <PhysicalStatusBadge status={currentStatus} />
+            {/* Zone de texte pour la raison — visible seulement si rouge ou jaune */}
+            {showNoteField && (
+              <div style={{
+                background: currentStatus === 'red' ? '#fff8f8' : '#fffef0',
+                border: `1px solid ${currentStatus === 'red' ? '#fca5a5' : '#fde68a'}`,
+                borderRadius: 8,
+                padding: '12px 14px',
+                marginBottom: 14,
+              }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 700, color: currentStatus === 'red' ? '#991b1b' : '#854d0e', display: 'block', marginBottom: 6 }}>
+                  {currentStatus === 'red' ? '🔴 Raison — Aucune pratique' : '🟡 Raison — Pratique avec restrictions'}
+                </label>
+                <textarea
+                  value={note}
+                  onChange={e => setPhysicalNotes(prev => ({ ...prev, [athlete.id]: e.target.value }))}
+                  onBlur={() => saveNote(athlete.id)}
+                  placeholder="Décrivez la raison ou les restrictions spécifiques (ex. : entorse cheville, protocole commotion, surcharge de travail…)"
+                  rows={2}
+                  style={{
+                    width: '100%',
+                    resize: 'vertical',
+                    borderColor: currentStatus === 'red' ? '#fca5a5' : '#fde68a',
+                    fontSize: '0.88rem',
+                    marginBottom: 6,
+                    boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <button
+                    className="btn btn-outline"
+                    style={{ padding: '4px 14px', fontSize: '0.8rem' }}
+                    onClick={() => saveNote(athlete.id)}
+                  >
+                    Enregistrer
+                  </button>
+                  {noteSaved[athlete.id] && (
+                    <span style={{ fontSize: '0.8rem', color: '#16a34a' }}>✓ Enregistré</span>
+                  )}
+                </div>
               </div>
             )}
 
@@ -242,40 +308,5 @@ export default function SpecialistView() {
         )
       })}
     </Layout>
-  )
-}
-
-function PhysicalStatusPicker({ athleteId, currentStatus, isSaving, onSelect }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-      <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#6b7280', marginRight: 4 }}>Capacité physique :</span>
-      {isSaving ? (
-        <span style={{ fontSize: '0.8rem', color: '#888' }}>Enregistrement…</span>
-      ) : (
-        PHYSICAL_STATUS_OPTIONS.map(opt => {
-          const isActive = currentStatus === opt.value
-          return (
-            <button
-              key={opt.value}
-              title={opt.label}
-              onClick={() => onSelect(athleteId, opt.value)}
-              style={{
-                background: isActive ? opt.bg : '#f9fafb',
-                border: `2px solid ${isActive ? opt.border : '#e5e7eb'}`,
-                borderRadius: 20,
-                padding: '4px 10px',
-                cursor: 'pointer',
-                fontSize: '0.78rem',
-                fontWeight: isActive ? 700 : 400,
-                color: isActive ? opt.text : '#6b7280',
-                transition: 'all 0.15s',
-              }}
-            >
-              {opt.emoji} {opt.label}
-            </button>
-          )
-        })
-      )}
-    </div>
   )
 }
