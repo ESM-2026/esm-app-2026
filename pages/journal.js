@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Head from 'next/head'
 import { supabase } from '../lib/supabase'
+import PinGate from '../components/PinGate'
 
 function getMonday(d = new Date()) {
   const date = new Date(d)
@@ -38,16 +39,6 @@ export default function Journal() {
     setAthletes(data || [])
   }
 
-  function handlePinSubmit(e) {
-    e.preventDefault()
-    setError('')
-    if (!pendingAthlete) return
-    if (!pendingAthlete.pin || pinInput.trim() === pendingAthlete.pin.trim()) {
-      handleAthleteSelect(pendingAthlete)
-    } else {
-      setError('Code PIN incorrect. Vérifie avec ton entraîneur.')
-    }
-  }
 
   async function loadQuestionsForAthlete(athleteId) {
     // Get coach(es) for this athlete's team, then load their config
@@ -212,8 +203,8 @@ export default function Journal() {
                   {athletes.map(a => (
                     <button key={a.id} className="btn btn-outline" onClick={() => {
                       setError('')
-                      if (a.pin) { setPendingAthlete(a); setPinInput(''); setStep('pin') }
-                      else { handleAthleteSelect(a) }
+                      setPendingAthlete(a)
+                      setStep('pin')
                     }} disabled={loading}>
                       {a.last_name}, {a.first_name}
                     </button>
@@ -225,33 +216,13 @@ export default function Journal() {
           </div>
         )}
 
-        {/* Step PIN */}
+        {/* Step PIN — création ou vérification */}
         {step === 'pin' && pendingAthlete && (
-          <div style={{ padding: 24 }}>
-            <p style={{ marginBottom: 16 }}>
-              <strong>{pendingAthlete.first_name} {pendingAthlete.last_name}</strong> —{' '}
-              <button onClick={() => { setStep('select'); setPendingAthlete(null) }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.85rem' }}>
-                Changer ↩
-              </button>
-            </p>
-            <form onSubmit={handlePinSubmit}>
-              <div className="form-group">
-                <label>Code PIN</label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={pinInput}
-                  onChange={e => setPinInput(e.target.value)}
-                  placeholder="Entrez votre PIN"
-                  autoFocus
-                  style={{ maxWidth: 160 }}
-                />
-              </div>
-              {error && <div className="alert alert-error">{error}</div>}
-              <button type="submit" className="btn btn-primary" disabled={loading}>Accéder au journal</button>
-            </form>
-          </div>
+          <PinGate
+            athlete={pendingAthlete}
+            onSuccess={() => handleAthleteSelect(pendingAthlete)}
+            onBack={() => { setStep('select'); setPendingAthlete(null) }}
+          />
         )}
 
         {/* Step 2 — Formulaire */}

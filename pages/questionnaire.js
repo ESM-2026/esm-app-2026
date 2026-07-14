@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import Head from 'next/head'
 import { supabase } from '../lib/supabase'
+import PinGate from '../components/PinGate'
 
 // ── Définition des questions ────────────────────────────────
 const SECTIONS = [
@@ -75,7 +76,7 @@ export default function Questionnaire() {
   const [athletes, setAthletes] = useState([])
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedAthlete, setSelectedAthlete] = useState('')
-  const [pinInput, setPinInput] = useState('')
+  const [pendingAthlete, setPendingAthlete] = useState(null)
   const [answers, setAnswers] = useState({})
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
@@ -107,21 +108,10 @@ export default function Questionnaire() {
   function handleAthleteSelect(e) {
     const id = e.target.value
     setSelectedAthlete(id)
-    setPinInput('')
     setError('')
-  }
-
-  function handlePinSubmit(e) {
-    e.preventDefault()
-    setError('')
-    const athlete = athletes.find(a => String(a.id) === String(selectedAthlete))
-    if (!athlete) return
-    // Si aucun PIN configuré, accès libre
-    if (!athlete.pin) { setStep('form'); return }
-    if (pinInput.trim() === athlete.pin.trim()) {
-      setStep('form')
-    } else {
-      setError('Code PIN incorrect. Vérifie avec ton entraîneur.')
+    if (id) {
+      const athlete = athletes.find(a => String(a.id) === String(id))
+      setPendingAthlete(athlete || null)
     }
   }
 
@@ -194,35 +184,21 @@ export default function Questionnaire() {
                 </select>
               </div>
             )}
-            {selectedAthlete && (
-              <button className="btn btn-primary" onClick={handlePinSubmit} style={{ marginTop: 8 }}>
+            {pendingAthlete && (
+              <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => setStep('pin')}>
                 Continuer →
               </button>
             )}
-            {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
           </div>
         )}
 
-        {/* PIN */}
-        {step === 'select' && selectedAthlete && athletes.find(a => String(a.id) === String(selectedAthlete))?.pin && (
-          <div style={styles.section}>
-            <form onSubmit={handlePinSubmit}>
-              <div className="form-group">
-                <label>Code PIN</label>
-                <input
-                  type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  value={pinInput}
-                  onChange={e => setPinInput(e.target.value)}
-                  placeholder="Entrez votre PIN"
-                  autoFocus
-                  style={{ maxWidth: 160 }}
-                />
-              </div>
-              <button type="submit" className="btn btn-primary">Accéder au questionnaire</button>
-            </form>
-          </div>
+        {/* PIN — création ou vérification */}
+        {step === 'pin' && pendingAthlete && (
+          <PinGate
+            athlete={pendingAthlete}
+            onSuccess={() => setStep('form')}
+            onBack={() => { setStep('select'); setPendingAthlete(null); setSelectedAthlete('') }}
+          />
         )}
 
         {/* Questions */}
