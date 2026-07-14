@@ -71,9 +71,15 @@ export default function CoachDashboard() {
 
   async function loadTeamData(teamId) {
     setLoading(true)
-    // Get athletes
-    const { data: athletes } = await supabase.from('athletes').select('id, first_name, last_name, physical_status, physical_status_note').eq('team_id', teamId).order('last_name')
-    if (!athletes || athletes.length === 0) { setAthleteData([]); setLoading(false); return }
+    // Get athletes — fallback si colonnes physical_status manquantes
+    let { data: athletes, error: athErr } = await supabase
+      .from('athletes').select('id, first_name, last_name, physical_status, physical_status_note')
+      .eq('team_id', teamId).order('last_name')
+    if (athErr || !athletes) {
+      const fallback = await supabase.from('athletes').select('id, first_name, last_name').eq('team_id', teamId).order('last_name')
+      athletes = fallback.data || []
+    }
+    if (athletes.length === 0) { setAthleteData([]); setLoading(false); return }
 
     const ids = athletes.map(a => a.id)
 

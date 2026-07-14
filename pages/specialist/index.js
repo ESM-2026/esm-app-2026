@@ -80,12 +80,16 @@ export default function SpecialistView() {
 
   async function loadTeamAthletes(teamId, canViewConf) {
     setLoading(true)
-    const { data: ath } = await supabase
+    let { data: ath, error: athErr } = await supabase
       .from('athletes')
       .select('id, first_name, last_name, physical_status, physical_status_note')
       .eq('team_id', teamId)
       .order('last_name')
-    setAthletes(ath || [])
+    if (athErr || !ath) {
+      const fallback = await supabase.from('athletes').select('id, first_name, last_name').eq('team_id', teamId).order('last_name')
+      ath = fallback.data || []
+    }
+    setAthletes(ath)
 
     const statusMap = {}
     const noteMap = {}
