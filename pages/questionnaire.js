@@ -70,11 +70,12 @@ const SECTIONS = [
 ]
 
 export default function Questionnaire() {
-  const [step, setStep] = useState('select') // 'select' | 'form' | 'done'
+  const [step, setStep] = useState('select') // 'select' | 'pin' | 'form' | 'done'
   const [teams, setTeams] = useState([])
   const [athletes, setAthletes] = useState([])
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedAthlete, setSelectedAthlete] = useState('')
+  const [pinInput, setPinInput] = useState('')
   const [answers, setAnswers] = useState({})
   const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(false)
@@ -88,7 +89,7 @@ export default function Questionnaire() {
   async function loadAthletes(teamId) {
     const { data } = await supabase
       .from('athletes')
-      .select('id, first_name, last_name')
+      .select('id, first_name, last_name, pin')
       .eq('team_id', teamId)
       .order('last_name')
     setAthletes(data || [])
@@ -101,6 +102,27 @@ export default function Questionnaire() {
     setSelectedTeam(id)
     setSelectedAthlete('')
     if (id) loadAthletes(id)
+  }
+
+  function handleAthleteSelect(e) {
+    const id = e.target.value
+    setSelectedAthlete(id)
+    setPinInput('')
+    setError('')
+  }
+
+  function handlePinSubmit(e) {
+    e.preventDefault()
+    setError('')
+    const athlete = athletes.find(a => String(a.id) === String(selectedAthlete))
+    if (!athlete) return
+    // Si aucun PIN configuré, accès libre
+    if (!athlete.pin) { setStep('form'); return }
+    if (pinInput.trim() === athlete.pin.trim()) {
+      setStep('form')
+    } else {
+      setError('Code PIN incorrect. Vérifie avec ton entraîneur.')
+    }
   }
 
   function handleAnswer(key, value) {
@@ -154,27 +176,57 @@ export default function Questionnaire() {
         </div>
 
         {/* Sélection athlète */}
-        <div style={styles.section}>
-          <div className="form-group">
-            <label>Ton équipe</label>
-            <select value={selectedTeam} onChange={handleTeamChange}>
-              <option value="">— Sélectionne ton équipe —</option>
-              {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
-            </select>
-          </div>
-          {selectedTeam && (
+        {step === 'select' && (
+          <div style={styles.section}>
             <div className="form-group">
-              <label>Ton nom</label>
-              <select value={selectedAthlete} onChange={e => setSelectedAthlete(e.target.value)}>
-                <option value="">— Sélectionne ton nom —</option>
-                {athletes.map(a => <option key={a.id} value={a.id}>{a.last_name}, {a.first_name}</option>)}
+              <label>Ton équipe</label>
+              <select value={selectedTeam} onChange={handleTeamChange}>
+                <option value="">— Sélectionne ton équipe —</option>
+                {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
             </div>
-          )}
-        </div>
+            {selectedTeam && (
+              <div className="form-group">
+                <label>Ton nom</label>
+                <select value={selectedAthlete} onChange={handleAthleteSelect}>
+                  <option value="">— Sélectionne ton nom —</option>
+                  {athletes.map(a => <option key={a.id} value={a.id}>{a.last_name}, {a.first_name}</option>)}
+                </select>
+              </div>
+            )}
+            {selectedAthlete && (
+              <button className="btn btn-primary" onClick={handlePinSubmit} style={{ marginTop: 8 }}>
+                Continuer →
+              </button>
+            )}
+            {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
+          </div>
+        )}
+
+        {/* PIN */}
+        {step === 'select' && selectedAthlete && athletes.find(a => String(a.id) === String(selectedAthlete))?.pin && (
+          <div style={styles.section}>
+            <form onSubmit={handlePinSubmit}>
+              <div className="form-group">
+                <label>Code PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pinInput}
+                  onChange={e => setPinInput(e.target.value)}
+                  placeholder="Entrez votre PIN"
+                  autoFocus
+                  style={{ maxWidth: 160 }}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary">Accéder au questionnaire</button>
+            </form>
+          </div>
+        )}
 
         {/* Questions */}
-        {selectedAthlete && (
+        {step === 'form' && (
           <form onSubmit={handleSubmit}>
             {SECTIONS.map((section, si) => (
               <div key={si} style={{ ...styles.section, ...(section.confidential ? styles.confidentialSection : {}) }}>

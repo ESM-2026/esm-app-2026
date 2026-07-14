@@ -11,11 +11,13 @@ function getMonday(d = new Date()) {
 }
 
 export default function Journal() {
-  const [step, setStep] = useState('select') // select | form | history | done
+  const [step, setStep] = useState('select') // select | pin | form | history | done
   const [teams, setTeams] = useState([])
   const [athletes, setAthletes] = useState([])
   const [selectedTeam, setSelectedTeam] = useState('')
   const [selectedAthlete, setSelectedAthlete] = useState(null)
+  const [pinInput, setPinInput] = useState('')
+  const [pendingAthlete, setPendingAthlete] = useState(null)
   const [questions, setQuestions] = useState([])
   const [answers, setAnswers] = useState({})
   const [history, setHistory] = useState([])
@@ -30,10 +32,21 @@ export default function Journal() {
   async function loadAthletes(teamId) {
     const { data } = await supabase
       .from('athletes')
-      .select('id, first_name, last_name')
+      .select('id, first_name, last_name, pin')
       .eq('team_id', teamId)
       .order('last_name')
     setAthletes(data || [])
+  }
+
+  function handlePinSubmit(e) {
+    e.preventDefault()
+    setError('')
+    if (!pendingAthlete) return
+    if (!pendingAthlete.pin || pinInput.trim() === pendingAthlete.pin.trim()) {
+      handleAthleteSelect(pendingAthlete)
+    } else {
+      setError('Code PIN incorrect. Vérifie avec ton entraîneur.')
+    }
   }
 
   async function loadQuestionsForAthlete(athleteId) {
@@ -183,11 +196,11 @@ export default function Journal() {
         </div>
 
         {/* Step 1 — Sélection */}
-        {(step === 'select' || !selectedAthlete) && (
+        {step === 'select' && (
           <div style={{ padding: 24 }}>
             <div className="form-group">
               <label>Ton équipe</label>
-              <select value={selectedTeam} onChange={e => { setSelectedTeam(e.target.value); setAthletes([]); setSelectedAthlete(null); if (e.target.value) loadAthletes(e.target.value) }}>
+              <select value={selectedTeam} onChange={e => { setSelectedTeam(e.target.value); setAthletes([]); setSelectedAthlete(null); setPendingAthlete(null); setError(''); if (e.target.value) loadAthletes(e.target.value) }}>
                 <option value="">— Sélectionne ton équipe —</option>
                 {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
               </select>
@@ -197,7 +210,11 @@ export default function Journal() {
                 <label style={{ fontWeight: 600, display: 'block', marginBottom: 10 }}>Ton nom</label>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {athletes.map(a => (
-                    <button key={a.id} className="btn btn-outline" onClick={() => handleAthleteSelect(a)} disabled={loading}>
+                    <button key={a.id} className="btn btn-outline" onClick={() => {
+                      setError('')
+                      if (a.pin) { setPendingAthlete(a); setPinInput(''); setStep('pin') }
+                      else { handleAthleteSelect(a) }
+                    }} disabled={loading}>
                       {a.last_name}, {a.first_name}
                     </button>
                   ))}
@@ -205,6 +222,35 @@ export default function Journal() {
               </div>
             )}
             {loading && <p style={{ color: '#888', marginTop: 12 }}>Chargement…</p>}
+          </div>
+        )}
+
+        {/* Step PIN */}
+        {step === 'pin' && pendingAthlete && (
+          <div style={{ padding: 24 }}>
+            <p style={{ marginBottom: 16 }}>
+              <strong>{pendingAthlete.first_name} {pendingAthlete.last_name}</strong> —{' '}
+              <button onClick={() => { setStep('select'); setPendingAthlete(null) }} style={{ background: 'none', border: 'none', color: '#6b7280', cursor: 'pointer', fontSize: '0.85rem' }}>
+                Changer ↩
+              </button>
+            </p>
+            <form onSubmit={handlePinSubmit}>
+              <div className="form-group">
+                <label>Code PIN</label>
+                <input
+                  type="password"
+                  inputMode="numeric"
+                  maxLength={6}
+                  value={pinInput}
+                  onChange={e => setPinInput(e.target.value)}
+                  placeholder="Entrez votre PIN"
+                  autoFocus
+                  style={{ maxWidth: 160 }}
+                />
+              </div>
+              {error && <div className="alert alert-error">{error}</div>}
+              <button type="submit" className="btn btn-primary" disabled={loading}>Accéder au journal</button>
+            </form>
           </div>
         )}
 

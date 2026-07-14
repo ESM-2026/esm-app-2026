@@ -18,7 +18,7 @@ export default function Admin() {
   // Forms
   const [newAccount, setNewAccount] = useState({ username: '', password: '', role: 'coach', email: '' })
   const [newTeam, setNewTeam] = useState({ name: '', region: '', school: '' })
-  const [newAthlete, setNewAthlete] = useState({ first_name: '', last_name: '', team_id: '' })
+  const [newAthlete, setNewAthlete] = useState({ first_name: '', last_name: '', team_id: '', pin: '' })
   const [assignment, setAssignment] = useState({ team_id: '', coach_id: '' })
 
   useEffect(() => {
@@ -99,10 +99,11 @@ export default function Admin() {
       first_name: newAthlete.first_name,
       last_name: newAthlete.last_name,
       team_id: newAthlete.team_id ? parseInt(newAthlete.team_id) : null,
+      pin: newAthlete.pin || null,
     }])
     if (error) { flash('❌ ' + error.message); return }
     flash('✅ Athlète ajouté.')
-    setNewAthlete({ first_name: '', last_name: '', team_id: '' })
+    setNewAthlete({ first_name: '', last_name: '', team_id: '', pin: '' })
     loadAll()
   }
 
@@ -271,6 +272,10 @@ export default function Admin() {
                   <option value="">— Choisir —</option>
                   {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
                 </select>
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>PIN (optionnel)</label>
+                <input type="text" maxLength={6} value={newAthlete.pin} onChange={e => setNewAthlete({ ...newAthlete, pin: e.target.value })} placeholder="Ex: 1234" />
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                 <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Ajouter</button>
