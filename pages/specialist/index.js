@@ -52,18 +52,33 @@ export default function SpecialistView() {
   const [physicalStatuses, setPhysicalStatuses] = useState({}) // {athleteId: status}
   const [physicalNotes, setPhysicalNotes] = useState({})       // {athleteId: note text}
   const [savingStatus, setSavingStatus] = useState({})         // {athleteId: bool}
-  const [noteSaved, setNoteSaved] = useState({})               // {athleteId: bool} feedback
+  const [noteSaved, setNoteSaved] = useState({})               // {athleteId: 'saved'|'error'|false}
+  const [statusMsg, setStatusMsg] = useState({})               // {athleteId: string} message d'erreur statut
 
   useEffect(() => {
     const u = getSession()
     if (!u || u.role !== 'specialist') { router.push('/login'); return }
     setUser(u)
-    supabase.from('teams').select('id, name').order('name').then(({ data }) => setTeams(data || []))
+    loadTeams(u.id, u.can_view_confidential)
   }, [])
 
   const canViewConfidential = user?.can_view_confidential === true
 
-  async function loadTeam(teamId) {
+  async function loadTeams(specialistId, canViewConf) {
+    const { data: ts } = await supabase
+      .from('team_specialists')
+      .select('team_id, teams(id, name)')
+      .eq('specialist_id', specialistId)
+    const assignedTeams = (ts || []).map(r => r.teams).filter(Boolean)
+    setTeams(assignedTeams)
+    // Si une seule équipe assignée, la charger automatiquement
+    if (assignedTeams.length === 1) {
+      setSelectedTeam(String(assignedTeams[0].id))
+      loadTeamAthletes(assignedTeams[0].id, canViewConf)
+    }
+  }
+
+  async function loadTeamAthletes(teamId, canViewConf) {
     setLoading(true)
     const { data: ath } = await supabase
       .from('athletes')
@@ -83,7 +98,9 @@ export default function SpecialistView() {
 
     if (!ath || ath.length === 0) { setLoading(false); return }
 
-    if (user?.can_view_confidential) {
+    // Charger les réponses confidentielles seulement si autorisé
+    const viewConf = canViewConf !== undefined ? canViewConf : user?.can_view_confidential
+    if (viewConf) {
       const { data: recs } = await supabase
         .from('responses')
         .select('athlete_id, submitted_at, q_c1, q_c2, q_c3, q_c4, comment')
@@ -96,21 +113,33 @@ export default function SpecialistView() {
 
   function handleTeamChange(e) {
     setSelectedTeam(e.target.value)
-    if (e.target.value) loadTeam(e.target.value)
+    if (e.target.value) loadTeamAthletes(e.target.value)
   }
 
   async function setPhysicalStatus(athleteId, status) {
     setSavingStatus(prev => ({ ...prev, [athleteId]: true }))
+    setStatusMsg(prev => ({ ...prev, [athleteId]: '' }))
+    // Cliquer sur le statut actif le désactive
     const newStatus = physicalStatuses[athleteId] === status ? null : status
-    // Si on passe au vert ou on efface, effacer aussi la note
     const clearNote = newStatus === 'green' || newStatus === null
-    const updateData = { physical_status: newStatus }
-    if (clearNote) updateData.physical_status_note = null
 
-    const { error } = await supabase.from('athletes').update(updateData).eq('id', athleteId)
+    // Essayer d'abord avec physical_status_note, sinon sans
+    let { error } = await supabase
+      .from('athletes')
+      .update({ physical_status: newStatus, ...(clearNote ? { physical_status_note: null } : {}) })
+      .eq('id', athleteId)
+
+    if (error) {
+      // Réessayer sans physical_status_note (colonne peut ne pas exister)
+      const retry = await supabase.from('athletes').update({ physical_status: newStatus }).eq('id', athleteId)
+      error = retry.error
+    }
+
     if (!error) {
       setPhysicalStatuses(prev => ({ ...prev, [athleteId]: newStatus }))
       if (clearNote) setPhysicalNotes(prev => ({ ...prev, [athleteId]: '' }))
+    } else {
+      setStatusMsg(prev => ({ ...prev, [athleteId]: '❌ Erreur: ' + error.message }))
     }
     setSavingStatus(prev => ({ ...prev, [athleteId]: false }))
   }
@@ -122,8 +151,11 @@ export default function SpecialistView() {
       .update({ physical_status_note: note || null })
       .eq('id', athleteId)
     if (!error) {
-      setNoteSaved(prev => ({ ...prev, [athleteId]: true }))
-      setTimeout(() => setNoteSaved(prev => ({ ...prev, [athleteId]: false })), 2000)
+      setNoteSaved(prev => ({ ...prev, [athleteId]: 'saved' }))
+      setTimeout(() => setNoteSaved(prev => ({ ...prev, [athleteId]: false })), 2500)
+    } else {
+      setNoteSaved(prev => ({ ...prev, [athleteId]: 'error' }))
+      setTimeout(() => setNoteSaved(prev => ({ ...prev, [athleteId]: false })), 3000)
     }
   }
 
@@ -173,16 +205,23 @@ export default function SpecialistView() {
         )}
       </div>
 
+      {!loading && teams.length === 0 && (
+        <div className="card" style={{ padding: '24px', color: '#888', textAlign: 'center' }}>
+          Aucune équipe ne vous est assignée. Contactez l'administrateur.
+        </div>
+      )}
+
       {loading && <p style={{ color: '#888' }}>Chargement…</p>}
       {!loading && selectedTeam && displayRows.length === 0 && (
-        <p style={{ color: '#888' }}>Aucun athlète pour cette sélection.</p>
+        <p style={{ color: '#888' }}>Aucun athlète dans cette équipe.</p>
       )}
 
       {!loading && displayRows.map(({ athlete, response }) => {
-        const currentStatus = physicalStatuses[athlete.id]
+        const currentStatus = physicalStatuses[athlete.id] || null
         const isSaving = savingStatus[athlete.id]
-        const note = physicalNotes[athlete.id] || ''
+        const note = physicalNotes[athlete.id] ?? ''
         const showNoteField = currentStatus === 'red' || currentStatus === 'yellow'
+        const errMsg = statusMsg[athlete.id]
         const hasAlert = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response?.[k]) === 'red')
         const hasWarning = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response?.[k]) === 'yellow')
 
@@ -233,6 +272,7 @@ export default function SpecialistView() {
                     )
                   })
                 )}
+                {errMsg && <span style={{ fontSize: '0.75rem', color: '#dc2626' }}>{errMsg}</span>}
               </div>
             </div>
 
@@ -271,8 +311,11 @@ export default function SpecialistView() {
                   >
                     Enregistrer
                   </button>
-                  {noteSaved[athlete.id] && (
+                  {noteSaved[athlete.id] === 'saved' && (
                     <span style={{ fontSize: '0.8rem', color: '#16a34a' }}>✓ Enregistré</span>
+                  )}
+                  {noteSaved[athlete.id] === 'error' && (
+                    <span style={{ fontSize: '0.8rem', color: '#dc2626' }}>❌ Erreur — exécutez add_physical_status_note.sql dans Supabase</span>
                   )}
                 </div>
               </div>

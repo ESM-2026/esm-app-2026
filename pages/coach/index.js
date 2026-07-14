@@ -49,6 +49,9 @@ export default function CoachDashboard() {
   const [loading, setLoading] = useState(false)
   const [newQ, setNewQ] = useState({ label: '', section: 'entrainement', input_type: 'textarea', min_val: 1, max_val: 10, options: [''] })
   const [newQMsg, setNewQMsg] = useState('')
+  const [newAthlete, setNewAthlete] = useState({ first_name: '', last_name: '' })
+  const [newAthleteMsg, setNewAthleteMsg] = useState('')
+  const [showAddAthlete, setShowAddAthlete] = useState(false)
 
   useEffect(() => {
     const u = getSession()
@@ -186,6 +189,24 @@ export default function CoachDashboard() {
     if (e.target.value) loadTeamData(parseInt(e.target.value))
   }
 
+  async function addAthlete(e) {
+    e.preventDefault()
+    if (!newAthlete.first_name.trim() || !newAthlete.last_name.trim()) return
+    if (!selectedTeam) { setNewAthleteMsg('❌ Sélectionnez d\'abord une équipe.'); return }
+    setNewAthleteMsg('')
+    const { error } = await supabase.from('athletes').insert([{
+      first_name: newAthlete.first_name.trim(),
+      last_name: newAthlete.last_name.trim(),
+      team_id: parseInt(selectedTeam),
+    }])
+    if (error) { setNewAthleteMsg('❌ Erreur: ' + error.message); return }
+    setNewAthleteMsg('✅ Athlète ajouté.')
+    setNewAthlete({ first_name: '', last_name: '' })
+    setShowAddAthlete(false)
+    setTimeout(() => setNewAthleteMsg(''), 3000)
+    loadTeamData(parseInt(selectedTeam))
+  }
+
   const filteredEntries = journalFilter === 'unread'
     ? journalEntries.filter(e => !e.coach_response)
     : journalEntries
@@ -209,6 +230,53 @@ export default function CoachDashboard() {
         <button className={`tab ${tab === 'journal' ? 'active' : ''}`} onClick={() => setTab('journal')}>📔 Journaux</button>
         <button className={`tab ${tab === 'config' ? 'active' : ''}`} onClick={() => setTab('config')}>⚙️ Questions journal</button>
       </div>
+
+      {/* ── AJOUT ATHLÈTE (visible quand une équipe est sélectionnée) ── */}
+      {selectedTeam && (
+        <div style={{ marginBottom: 16 }}>
+          {newAthleteMsg && (
+            <div className={`alert ${newAthleteMsg.startsWith('✅') ? 'alert-success' : 'alert-error'}`} style={{ marginBottom: 10 }}>
+              {newAthleteMsg}
+            </div>
+          )}
+          {!showAddAthlete ? (
+            <button className="btn btn-outline" style={{ fontSize: '0.85rem' }} onClick={() => setShowAddAthlete(true)}>
+              ➕ Ajouter un athlète à cette équipe
+            </button>
+          ) : (
+            <div className="card" style={{ padding: '16px 20px' }}>
+              <h4 style={{ marginBottom: 14, color: '#1a3a5c' }}>Ajouter un athlète</h4>
+              <form onSubmit={addAthlete} style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 140 }}>
+                  <label>Prénom *</label>
+                  <input
+                    type="text"
+                    value={newAthlete.first_name}
+                    onChange={e => setNewAthlete(prev => ({ ...prev, first_name: e.target.value }))}
+                    placeholder="Prénom"
+                    required
+                    autoFocus
+                  />
+                </div>
+                <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 140 }}>
+                  <label>Nom *</label>
+                  <input
+                    type="text"
+                    value={newAthlete.last_name}
+                    onChange={e => setNewAthlete(prev => ({ ...prev, last_name: e.target.value }))}
+                    placeholder="Nom de famille"
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button type="submit" className="btn btn-primary">Ajouter</button>
+                  <button type="button" className="btn btn-outline" onClick={() => { setShowAddAthlete(false); setNewAthlete({ first_name: '', last_name: '' }) }}>Annuler</button>
+                </div>
+              </form>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ── TAB: SANTÉ MENTALE ── */}
       {tab === 'sante' && (
