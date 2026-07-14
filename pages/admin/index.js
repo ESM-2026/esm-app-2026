@@ -7,16 +7,16 @@ import { getSession } from '../../lib/auth'
 export default function Admin() {
   const router = useRouter()
   const [user, setUser] = useState(null)
-  const [tab, setTab] = useState('comptes') // comptes | equipes | athletes
+  const [tab, setTab] = useState('comptes') // comptes | equipes | athletes | assign
   const [accounts, setAccounts] = useState([])
   const [teams, setTeams] = useState([])
   const [athletes, setAthletes] = useState([])
-  const [teamCoaches, setTeamCoaches] = useState([]) // [{team_id, coach_id}]
+  const [teamCoaches, setTeamCoaches] = useState([])
   const [loading, setLoading] = useState(false)
   const [msg, setMsg] = useState('')
 
   // Forms
-  const [newAccount, setNewAccount] = useState({ username: '', password: '', role: 'coach', email: '' })
+  const [newAccount, setNewAccount] = useState({ username: '', password: '', role: 'coach', email: '', can_view_confidential: false })
   const [newTeam, setNewTeam] = useState({ name: '', region: '', school: '' })
   const [newAthlete, setNewAthlete] = useState({ first_name: '', last_name: '', team_id: '', pin: '' })
   const [assignment, setAssignment] = useState({ team_id: '', coach_id: '' })
@@ -31,7 +31,7 @@ export default function Admin() {
   async function loadAll() {
     setLoading(true)
     const [{ data: accs }, { data: tms }, { data: atls }, { data: tc }] = await Promise.all([
-      supabase.from('accounts').select('id, username, role, email, region, school').order('username'),
+      supabase.from('accounts').select('id, username, role, email, region, school, can_view_confidential').order('username'),
       supabase.from('teams').select('id, name, region, school').order('name'),
       supabase.from('athletes').select('id, first_name, last_name, team_id').order('last_name'),
       supabase.from('team_coaches').select('team_id, coach_id'),
@@ -43,7 +43,7 @@ export default function Admin() {
     setLoading(false)
   }
 
-  function flash(m) { setMsg(m); setTimeout(() => setMsg(''), 3000) }
+  function flash(m) { setMsg(m); setTimeout(() => setMsg(''), 4000) }
 
   // ── COMPTES ──────────────────────────────────────────────
   async function createAccount(e) {
@@ -56,8 +56,17 @@ export default function Admin() {
       p_email: newAccount.email || null,
     })
     if (error) { flash('❌ Erreur: ' + error.message); return }
+
+    // Si spécialiste avec accès confidentiel, mettre à jour séparément
+    if (newAccount.role === 'specialist' && newAccount.can_view_confidential) {
+      const { data: created } = await supabase.from('accounts').select('id').eq('username', newAccount.username).single()
+      if (created) {
+        await supabase.from('accounts').update({ can_view_confidential: true }).eq('id', created.id)
+      }
+    }
+
     flash('✅ Compte créé.')
-    setNewAccount({ username: '', password: '', role: 'coach', email: '' })
+    setNewAccount({ username: '', password: '', role: 'coach', email: '', can_view_confidential: false })
     loadAll()
   }
 
@@ -72,6 +81,17 @@ export default function Admin() {
     if (!pwd) return
     await supabase.rpc('reset_password', { p_account_id: id, p_password: pwd })
     flash('✅ Mot de passe réinitialisé.')
+  }
+
+  async function toggleConfidential(account) {
+    const newVal = !account.can_view_confidential
+    const { error } = await supabase.from('accounts').update({ can_view_confidential: newVal }).eq('id', account.id)
+    if (error) { flash('❌ ' + error.message); return }
+    setAccounts(prev => prev.map(a => a.id === account.id ? { ...a, can_view_confidential: newVal } : a))
+    flash(newVal
+      ? `✅ ${account.username} peut maintenant accéder aux questions confidentielles.`
+      : `✅ Accès aux questions confidentielles retiré pour ${account.username}.`
+    )
   }
 
   // ── ÉQUIPES ──────────────────────────────────────────────
@@ -133,6 +153,7 @@ export default function Admin() {
   }
 
   const coaches = accounts.filter(a => a.role === 'coach')
+  const specialists = accounts.filter(a => a.role === 'specialist')
   const teamCoachMap = {}
   for (const tc of teamCoaches) {
     if (!teamCoachMap[tc.team_id]) teamCoachMap[tc.team_id] = []
@@ -168,7 +189,7 @@ export default function Admin() {
               </div>
               <div className="form-group" style={{ margin: 0 }}>
                 <label>Rôle</label>
-                <select value={newAccount.role} onChange={e => setNewAccount({ ...newAccount, role: e.target.value })}>
+                <select value={newAccount.role} onChange={e => setNewAccount({ ...newAccount, role: e.target.value, can_view_confidential: false })}>
                   <option value="coach">Entraîneur</option>
                   <option value="specialist">Spécialiste</option>
                   <option value="admin">Admin</option>
@@ -181,17 +202,69 @@ export default function Admin() {
               <div style={{ display: 'flex', alignItems: 'flex-end' }}>
                 <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Créer</button>
               </div>
+              {/* Checkbox confidentiel — visible seulement pour spécialiste */}
+              {newAccount.role === 'specialist' && (
+                <div style={{ gridColumn: '1 / -1', display: 'flex', alignItems: 'center', gap: 10, background: '#f3e8ff', border: '1px solid #c4b5fd', borderRadius: 8, padding: '10px 14px' }}>
+                  <input
+                    type="checkbox"
+                    id="can_view_confidential"
+                    checked={newAccount.can_view_confidential}
+                    onChange={e => setNewAccount({ ...newAccount, can_view_confidential: e.target.checked })}
+                    style={{ accentColor: '#7c3aed', width: 18, height: 18, flexShrink: 0 }}
+                  />
+                  <label htmlFor="can_view_confidential" style={{ cursor: 'pointer', fontSize: '0.88rem', color: '#6d28d9' }}>
+                    <strong>🔒 Accès aux questions confidentielles</strong> — Ce spécialiste pourra voir les réponses aux questions de santé mentale confidentielles.
+                  </label>
+                </div>
+              )}
             </form>
           </div>
+
+          {/* Liste des comptes */}
           <div className="card" style={{ padding: 0 }}>
             <table>
-              <thead><tr><th>Utilisateur</th><th>Rôle</th><th>Courriel</th><th>Actions</th></tr></thead>
+              <thead>
+                <tr>
+                  <th>Utilisateur</th>
+                  <th>Rôle</th>
+                  <th>Courriel</th>
+                  <th style={{ minWidth: 200 }}>Permissions</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
               <tbody>
                 {accounts.map(a => (
                   <tr key={a.id}>
                     <td><strong>{a.username}</strong></td>
-                    <td><span style={{ fontSize: '0.82rem', textTransform: 'capitalize' }}>{a.role}</span></td>
+                    <td>
+                      <span style={{
+                        fontSize: '0.78rem', fontWeight: 600, textTransform: 'capitalize',
+                        background: a.role === 'admin' ? '#fef9c3' : a.role === 'specialist' ? '#f3e8ff' : '#f0fdf4',
+                        color: a.role === 'admin' ? '#854d0e' : a.role === 'specialist' ? '#6d28d9' : '#166534',
+                        padding: '2px 8px', borderRadius: 20,
+                      }}>
+                        {a.role === 'coach' ? 'Entraîneur' : a.role === 'specialist' ? 'Spécialiste' : 'Admin'}
+                      </span>
+                    </td>
                     <td style={{ fontSize: '0.85rem', color: '#666' }}>{a.email || '—'}</td>
+                    <td>
+                      {a.role === 'specialist' && (
+                        <button
+                          onClick={() => toggleConfidential(a)}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 8,
+                            background: a.can_view_confidential ? '#f3e8ff' : '#f9fafb',
+                            border: `1px solid ${a.can_view_confidential ? '#c4b5fd' : '#e5e7eb'}`,
+                            borderRadius: 8, padding: '5px 12px', cursor: 'pointer',
+                            fontSize: '0.78rem', fontWeight: 600,
+                            color: a.can_view_confidential ? '#6d28d9' : '#6b7280',
+                          }}
+                        >
+                          {a.can_view_confidential ? '🔒 Confidentiel : Oui' : '🔓 Confidentiel : Non'}
+                        </button>
+                      )}
+                      {a.role !== 'specialist' && <span style={{ color: '#ccc', fontSize: '0.8rem' }}>—</span>}
+                    </td>
                     <td style={{ display: 'flex', gap: 8 }}>
                       <button className="btn btn-outline" style={{ padding: '4px 12px', fontSize: '0.8rem' }} onClick={() => resetPassword(a.id)}>Réinitialiser MDP</button>
                       {a.username !== 'admin' && (
@@ -203,6 +276,28 @@ export default function Admin() {
               </tbody>
             </table>
           </div>
+
+          {/* Section résumé des spécialistes */}
+          {specialists.length > 0 && (
+            <div className="card" style={{ background: '#fafafe', border: '1px solid #e0e7ff' }}>
+              <h4 style={{ color: '#4338ca', marginBottom: 12 }}>🔒 Accès aux données confidentielles</h4>
+              <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: 12 }}>
+                Seuls les spécialistes avec l'accès activé voient les questions de santé mentale confidentielles (q_c1–q_c4). Tous les spécialistes peuvent gérer la capacité physique des athlètes.
+              </p>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {specialists.map(s => (
+                  <span key={s.id} style={{
+                    background: s.can_view_confidential ? '#f3e8ff' : '#f9fafb',
+                    border: `1px solid ${s.can_view_confidential ? '#c4b5fd' : '#e5e7eb'}`,
+                    color: s.can_view_confidential ? '#6d28d9' : '#9ca3af',
+                    borderRadius: 20, padding: '4px 12px', fontSize: '0.82rem', fontWeight: 600,
+                  }}>
+                    {s.can_view_confidential ? '🔒' : '🔓'} {s.username}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

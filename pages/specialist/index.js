@@ -59,6 +59,8 @@ export default function SpecialistView() {
     supabase.from('teams').select('id, name').order('name').then(({ data }) => setTeams(data || []))
   }, [])
 
+  const canViewConfidential = user?.can_view_confidential === true
+
   async function loadTeam(teamId) {
     setLoading(true)
     const { data: ath } = await supabase
@@ -77,13 +79,15 @@ export default function SpecialistView() {
 
     if (!ath || ath.length === 0) { setLoading(false); return }
 
-    const { data: recs } = await supabase
-      .from('responses')
-      .select('athlete_id, submitted_at, q_c1, q_c2, q_c3, q_c4, comment')
-      .in('athlete_id', ath.map(a => a.id))
-      .order('submitted_at', { ascending: false })
-
-    setResponses(recs || [])
+    // Charger les réponses confidentielles seulement si autorisé
+    if (user?.can_view_confidential) {
+      const { data: recs } = await supabase
+        .from('responses')
+        .select('athlete_id, submitted_at, q_c1, q_c2, q_c3, q_c4, comment')
+        .in('athlete_id', ath.map(a => a.id))
+        .order('submitted_at', { ascending: false })
+      setResponses(recs || [])
+    }
     setLoading(false)
   }
 
@@ -113,7 +117,7 @@ export default function SpecialistView() {
 
   const rows = athletes.map(a => ({ athlete: a, response: latestMap[a.id] || null }))
 
-  const displayRows = filter === 'alerts'
+  const displayRows = (canViewConfidential && filter === 'alerts')
     ? rows.filter(({ response }) => {
         if (!response) return false
         return ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) !== 'green')
@@ -123,10 +127,16 @@ export default function SpecialistView() {
   return (
     <Layout title="Vue Spécialiste" user={user}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexWrap: 'wrap', gap: 12 }}>
-        <h2 style={{ color: '#7c3aed' }}>🔒 Vue Spécialiste — Questions confidentielles</h2>
-        <div style={{ background: '#f3e8ff', border: '1px solid #c4b5fd', borderRadius: 8, padding: '8px 14px', fontSize: '0.82rem', color: '#6d28d9', maxWidth: 340 }}>
-          Ces données sont strictement réservées aux professionnels désignés. Elles ne sont jamais partagées avec les entraîneurs.
-        </div>
+        <h2 style={{ color: '#7c3aed' }}>🏥 Vue Spécialiste</h2>
+        {canViewConfidential ? (
+          <div style={{ background: '#f3e8ff', border: '1px solid #c4b5fd', borderRadius: 8, padding: '8px 14px', fontSize: '0.82rem', color: '#6d28d9', maxWidth: 340 }}>
+            🔒 Vous avez accès aux données confidentielles. Elles ne sont jamais partagées avec les entraîneurs.
+          </div>
+        ) : (
+          <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '8px 14px', fontSize: '0.82rem', color: '#6b7280', maxWidth: 340 }}>
+            🔓 Accès limité — Capacité physique uniquement. Contactez l'administrateur pour accéder aux données confidentielles.
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
@@ -137,7 +147,7 @@ export default function SpecialistView() {
             {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
           </select>
         </div>
-        {selectedTeam && (
+        {selectedTeam && canViewConfidential && (
           <div>
             <button className={`btn ${filter === 'all' ? 'btn-primary' : 'btn-outline'}`} style={{ marginRight: 8 }} onClick={() => setFilter('all')}>Tous</button>
             <button className={`btn ${filter === 'alerts' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setFilter('alerts')}>Alertes seulement</button>
@@ -173,16 +183,18 @@ export default function SpecialistView() {
           )
         }
 
-        const hasAlert = ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'red')
-        const hasWarning = ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'yellow')
+        const hasAlert = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'red')
+        const hasWarning = canViewConfidential && ['q_c1','q_c2','q_c3','q_c4'].some(k => flag(k, response[k]) === 'yellow')
         return (
           <div key={athlete.id} className="card" style={{ borderLeft: `4px solid ${hasAlert ? '#dc2626' : hasWarning ? '#ca8a04' : '#16a34a'}`, marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 14, flexWrap: 'wrap', gap: 12 }}>
               <div>
                 <strong style={{ fontSize: '1rem' }}>{athlete.last_name}, {athlete.first_name}</strong>
-                <span style={{ marginLeft: 12, fontSize: '0.8rem', color: '#888' }}>
-                  Réponse du {new Date(response.submitted_at).toLocaleDateString('fr-CA')}
-                </span>
+                {response && (
+                  <span style={{ marginLeft: 12, fontSize: '0.8rem', color: '#888' }}>
+                    Réponse du {new Date(response.submitted_at).toLocaleDateString('fr-CA')}
+                  </span>
+                )}
               </div>
               <PhysicalStatusPicker
                 athleteId={athlete.id}
@@ -200,26 +212,31 @@ export default function SpecialistView() {
               </div>
             )}
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
-              {Object.keys(CONFIDENTIAL_LABELS).map(key => {
-                const val = response[key]
-                const color = flag(key, val)
-                const label = val != null ? SCALE_C[key]?.[val - 1] || val : '—'
-                return (
-                  <div key={key} style={{ background: color === 'red' ? '#fee2e2' : color === 'yellow' ? '#fef9c3' : '#f0fdf4', borderRadius: 8, padding: '10px 14px' }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', marginBottom: 4 }}>{CONFIDENTIAL_LABELS[key]}</div>
-                    <div style={{ fontWeight: 700, color: color === 'red' ? '#991b1b' : color === 'yellow' ? '#854d0e' : '#166534' }}>
-                      {val != null ? `${val} — ${label}` : '—'}
-                    </div>
+            {/* Questions confidentielles — seulement si autorisé */}
+            {canViewConfidential && response && (
+              <>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 12 }}>
+                  {Object.keys(CONFIDENTIAL_LABELS).map(key => {
+                    const val = response[key]
+                    const color = flag(key, val)
+                    const label = val != null ? SCALE_C[key]?.[val - 1] || val : '—'
+                    return (
+                      <div key={key} style={{ background: color === 'red' ? '#fee2e2' : color === 'yellow' ? '#fef9c3' : '#f0fdf4', borderRadius: 8, padding: '10px 14px' }}>
+                        <div style={{ fontSize: '0.78rem', fontWeight: 600, color: '#555', marginBottom: 4 }}>{CONFIDENTIAL_LABELS[key]}</div>
+                        <div style={{ fontWeight: 700, color: color === 'red' ? '#991b1b' : color === 'yellow' ? '#854d0e' : '#166534' }}>
+                          {val != null ? `${val} — ${label}` : '—'}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+                {response.comment && (
+                  <div style={{ marginTop: 14, background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', fontSize: '0.88rem' }}>
+                    <div style={{ fontWeight: 600, color: '#555', marginBottom: 4 }}>Commentaire de l'athlète</div>
+                    <div>{response.comment}</div>
                   </div>
-                )
-              })}
-            </div>
-            {response.comment && (
-              <div style={{ marginTop: 14, background: '#fafafa', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', fontSize: '0.88rem' }}>
-                <div style={{ fontWeight: 600, color: '#555', marginBottom: 4 }}>Commentaire de l'athlète</div>
-                <div>{response.comment}</div>
-              </div>
+                )}
+              </>
             )}
           </div>
         )
