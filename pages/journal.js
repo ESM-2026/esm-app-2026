@@ -266,7 +266,7 @@ export default function Journal() {
         {step === 'history' && (
           <div style={{ padding: 24 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <h3 style={{ color: '#1a3a5c' }}>Historique — {selectedAthlete?.first_name}</h3>
+              <h3 style={{ color: '#3C3C3C' }}>Historique — {selectedAthlete?.first_name}</h3>
               <button className="btn btn-outline" onClick={() => setStep('select')}>Retour</button>
             </div>
             {history.map(entry => (
@@ -289,7 +289,7 @@ function QuestionInput({ q, value, onChange }) {
         <div>
           <input type="range" min={q.min_val} max={q.max_val} value={ans.number ?? q.min_val} onChange={e => onChange('number', parseFloat(e.target.value))} />
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#888' }}>
-            <span>{q.min_val}</span><span style={{ fontWeight: 700, color: '#1a3a5c' }}>{ans.number ?? q.min_val}</span><span>{q.max_val}</span>
+            <span>{q.min_val}</span><span style={{ fontWeight: 700, color: '#3C3C3C' }}>{ans.number ?? q.min_val}</span><span>{q.max_val}</span>
           </div>
         </div>
       )
@@ -403,73 +403,4 @@ function HistoryCard({ entry }) {
                   <div style={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}>
                     {r.journal_questions?.label || 'Question'}
                   </div>
-                  <div style={{ color: '#1a1a1a', marginTop: 4 }}>
-                    {displayValue(r)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {responses.length === 0 && !loadingResp && (
-            <p style={{ color: '#9ca3af', fontSize: '0.85rem', marginBottom: 12 }}>Aucune réponse enregistrée.</p>
-          )}
-
-          {/* Réponse du coach */}
-          {entry.coach_response && (
-            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '12px 14px' }}>
-              <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#16a34a', marginBottom: 4 }}>
-                💬 Message de ton entraîneur
-              </div>
-              <div>{entry.coach_response}</div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function PageWrapper({ children }) {
-  return (
-    <>
-      <Head>
-        <title>Journal de bord — ESM</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-      </Head>
-      <div style={s.page}>
-        {children}
-      </div>
-    </>
-  )
-}
-
-function groupBySection(questions) {
-  const map = new Map()
-  for (const q of questions) {
-    if (!map.has(q.section)) map.set(q.section, [])
-    map.get(q.section).push(q)
-  }
-  return [...map.entries()]
-}
-
-function sectionLabel(key) {
-  const labels = {
-    entrainement: '🏋️ Entraînement',
-    recuperation: '💤 Récupération',
-    objectifs: '🎯 Objectifs',
-    reflexion: '🪞 Réflexion',
-    coach: '💬 Message à l\'entraîneur',
-  }
-  return labels[key] || key
-}
-
-const s = {
-  page: { minHeight: '100vh', background: '#f0f4f8', padding: '20px 16px', fontFamily: 'system-ui, sans-serif' },
-  card: { background: '#fff', borderRadius: 16, maxWidth: 720, margin: '0 auto', boxShadow: '0 2px 12px rgba(0,0,0,0.1)', overflow: 'hidden' },
-  headerBand: { background: '#1a3a5c', color: '#fff', padding: '24px', textAlign: 'center' },
-  title: { fontSize: '1.4rem', fontWeight: 700 },
-  subtitle: { marginTop: 6, opacity: 0.8, fontSize: '0.9rem' },
-  section: { padding: '20px 24px', borderBottom: '1px solid #f0f0f0' },
-  sectionTitle: { fontSize: '1rem', fontWeight: 700, color: '#1a3a5c', marginBottom: 14 },
-}
+                  <div style={{ color: '#1a1a
