@@ -24,12 +24,13 @@ export default function Layout({ children, title = 'ESM CoachAPP', user }) {
           {/* Logo */}
           <div style={styles.logoWrap}>
             <img
-              src="/logo.png"
+              src="/logo PNG.png"
               alt="Excellence Sportive Montérégie"
               style={styles.logoImg}
-              onError={e => { e.target.style.display = 'none' }}
+              onError={e => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'inline' }}
+              onLoad={e => { e.target.nextSibling.style.display = 'none' }}
             />
-            <span style={styles.logoFallback}>ESM CoachAPP</span>
+            <span style={{ ...styles.logoFallback, display: 'none' }}>ESM CoachAPP</span>
           </div>
 
           {user && (
@@ -46,7 +47,7 @@ export default function Layout({ children, title = 'ESM CoachAPP', user }) {
         <main style={styles.main}>{children}</main>
 
         <footer style={styles.footer}>
-          <img src="/logo.png" alt="" style={{ height: 24, marginRight: 8, verticalAlign: 'middle', opacity: 0.7 }}
+          <img src="/logo PNG.png" alt="" style={{ height: 24, marginRight: 8, verticalAlign: 'middle', opacity: 0.7 }}
                onError={e => { e.target.style.display = 'none' }} />
           Excellence Sportive Montérégie © {new Date().getFullYear()}
         </footer>
