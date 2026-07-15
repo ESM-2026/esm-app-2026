@@ -95,4 +95,46 @@ export default function Home() {
                 </div>
                 <div className="form-group" style={{ margin: 0, flex: 1 }}>
                   <label>Mot de passe</label>
-                  
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={e => setPassword(e.target.value)}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                  <button type="submit" className="btn btn-primary" style={{ width: '100%', whiteSpace: 'nowrap' }} disabled={loading}>
+                    {loading ? 'Connexion…' : 'Connexion →'}
+                  </button>
+                </div>
+              </div>
+              {error && <div className="alert alert-error" style={{ marginTop: 12 }}>{error}</div>}
+            </form>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
+const s = {
+  page: { minHeight: '100vh', background: '#f5f7fa', display: 'flex', flexDirection: 'column' },
+  header: { background: '#3C3C3C', padding: '32px 24px', textAlign: 'center', borderBottom: '4px solid #C5D400' },
+  headerTitle: { color: '#C5D400', fontSize: '1.8rem', fontWeight: 700, letterSpacing: '0.05em' },
+  headerSub: { color: 'rgba(255,255,255,0.7)', marginTop: 4, fontSize: '0.9rem' },
+  body: { flex: 1, maxWidth: 640, margin: '0 auto', width: '100%', padding: '32px 16px' },
+  athleteSection: { background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)', marginBottom: 24 },
+  sectionLabel: { fontSize: '0.78rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 14 },
+  athleteDesc: { color: '#555', marginBottom: 16, fontSize: '0.9rem' },
+  athleteCards: { display: 'flex', gap: 14 },
+  card: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 12px', borderRadius: 12, border: '2px solid #e5e7eb', textDecoration: 'none', color: '#1a1a1a', background: '#fff' },
+  cardIcon: { fontSize: 32, marginBottom: 10 },
+  cardTitle: { fontWeight: 700, textAlign: 'center', fontSize: '0.9rem', lineHeight: 1.3, color: '#3C3C3C' },
+  cardSub: { fontSize: '0.75rem', color: '#9ca3af', marginTop: 8 },
+  divider: { display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24 },
+  dividerText: { fontSize: '0.8rem', color: '#9ca3af', whiteSpace: 'nowrap', background: '#f5f7fa', padding: '0 8px' },
+  staffSection: { background: '#fff', borderRadius: 14, padding: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' },
+  form: { marginTop: 16 },
+  formRow: { display: 'flex', gap: 14, flexWrap: 'wrap', alignItems: 'flex-start' },
+}

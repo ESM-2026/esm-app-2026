@@ -403,4 +403,74 @@ function HistoryCard({ entry }) {
                   <div style={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}>
                     {r.journal_questions?.label || 'Question'}
                   </div>
-                  <div style={{ color: '#1a1a
+                  <div style={{ color: '#1a1a1a', fontSize: '0.9rem', marginTop: 4 }}>{displayValue(r)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Réponse de l'entraîneur */}
+          {entry.coach_response && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '12px 14px' }}>
+              <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 6 }}>
+                💬 Réponse de l'entraîneur
+              </div>
+              <p style={{ color: '#166534', fontSize: '0.88rem', margin: 0 }}>{entry.coach_response}</p>
+            </div>
+          )}
+
+          {responses.length === 0 && !loadingResp && (
+            <p style={{ color: '#9ca3af', fontStyle: 'italic' }}>Aucune réponse enregistrée.</p>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function groupBySection(questions) {
+  const map = {}
+  for (const q of questions) {
+    if (!map[q.section]) map[q.section] = []
+    map[q.section].push(q)
+  }
+  return Object.entries(map)
+}
+
+function sectionLabel(section) {
+  const labels = {
+    entrainement: 'Entraînement',
+    nutrition: 'Nutrition',
+    sante: 'Santé & bien-être',
+    objectifs: 'Objectifs',
+  }
+  return labels[section] || section
+}
+
+function PageWrapper({ children }) {
+  return (
+    <>
+      <Head>
+        <title>Journal de bord — ESM</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </Head>
+      <div style={{ minHeight: '100vh', background: '#f5f7fa' }}>
+        <div style={{ background: '#3C3C3C', borderBottom: '4px solid #C5D400', padding: '10px 20px', textAlign: 'center' }}>
+          <span style={{ color: '#C5D400', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.04em' }}>ESM — Excellence Sportive Montérégie</span>
+        </div>
+        <div style={{ maxWidth: 680, margin: '32px auto', padding: '0 16px' }}>
+          {children}
+        </div>
+      </div>
+    </>
+  )
+}
+
+const s = {
+  card: { background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.09)', overflow: 'hidden', marginBottom: 24 },
+  headerBand: { background: '#3C3C3C', padding: '24px', borderBottom: '3px solid #C5D400' },
+  title: { color: '#C5D400', fontSize: '1.4rem', fontWeight: 700 },
+  subtitle: { color: 'rgba(255,255,255,0.7)', marginTop: 4, fontSize: '0.85rem' },
+  section: { padding: '20px 24px', borderBottom: '1px solid #f3f4f6' },
+  sectionTitle: { color: '#3C3C3C', fontWeight: 700, marginBottom: 16, fontSize: '1rem' },
+}

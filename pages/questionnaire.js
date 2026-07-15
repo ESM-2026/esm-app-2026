@@ -274,4 +274,141 @@ export default function Questionnaire() {
             {SECTIONS.map((section, si) => (
               <div key={si} style={{ ...styles.section, ...(section.confidential ? styles.confidentialSection : {}) }}>
                 <h3 style={styles.sectionTitle}>{section.title}</h3>
-   
+                {section.subtitle && (
+                  <p style={{ fontSize: '0.82rem', color: '#6d28d9', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 8, padding: '8px 12px', marginBottom: 16 }}>
+                    🔒 {section.subtitle}
+                  </p>
+                )}
+                {section.questions.map(q => (
+                  <div key={q.key} className="form-group">
+                    <label>{q.label}</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
+                      {q.labels.map((lbl, idx) => {
+                        const val = q.min + idx
+                        const selected = answers[q.key] === val
+                        return (
+                          <button
+                            key={idx}
+                            type="button"
+                            onClick={() => handleAnswer(q.key, val)}
+                            style={{
+                              padding: '8px 14px',
+                              borderRadius: 8,
+                              border: selected ? '2px solid #C5D400' : '1px solid #d0d5dd',
+                              background: selected ? '#3C3C3C' : '#fff',
+                              color: selected ? '#C5D400' : '#333',
+                              fontWeight: selected ? 700 : 400,
+                              cursor: 'pointer',
+                              fontSize: '0.85rem',
+                              transition: 'all 0.15s',
+                            }}
+                          >
+                            {val} — {lbl}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+
+            <div style={styles.section}>
+              <div className="form-group">
+                <label>Commentaire (facultatif)</label>
+                <textarea
+                  value={comment}
+                  onChange={e => setComment(e.target.value)}
+                  placeholder="Ajoute un commentaire si tu le souhaites…"
+                  rows={3}
+                />
+              </div>
+            </div>
+
+            {error && <div className="alert alert-error" style={{ margin: '0 24px 16px' }}>{error}</div>}
+
+            <div style={{ padding: '16px 24px 32px' }}>
+              <button type="submit" className="btn btn-primary" style={{ width: '100%', padding: '14px' }} disabled={loading || !allAnswered()}>
+                {loading ? 'Envoi en cours…' : '✅ Soumettre mon questionnaire'}
+              </button>
+              {!allAnswered() && (
+                <p style={{ fontSize: '0.8rem', color: '#9ca3af', marginTop: 8, textAlign: 'center' }}>
+                  Réponds à toutes les questions pour soumettre.
+                </p>
+              )}
+            </div>
+          </form>
+        )}
+      </div>
+    </PageWrapper>
+  )
+}
+
+function QuestionnaireHistoryCard({ response: r }) {
+  const [open, setOpen] = useState(false)
+  const allKeys = SECTIONS.flatMap(s => s.questions.map(q => q.key))
+  const nonConfKeys = NON_CONFIDENTIAL_KEYS
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
+      <div
+        style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: open ? '#f0f7ff' : '#fff' }}
+        onClick={() => setOpen(!open)}
+      >
+        <strong style={{ fontSize: '0.9rem' }}>{r.submitted_at ? new Date(r.submitted_at).toLocaleDateString('fr-CA') : '—'}</strong>
+        <span style={{ color: '#6b7280' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div style={{ padding: 16, borderTop: '1px solid #e5e7eb', fontSize: '0.85rem' }}>
+          {SECTIONS.map((section, si) => (
+            <div key={si} style={{ marginBottom: 16 }}>
+              <div style={{ fontWeight: 700, color: '#3C3C3C', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: 8 }}>
+                {section.title}
+              </div>
+              {section.questions.map(q => {
+                const val = r[q.key]
+                if (val == null) return null
+                const lbl = q.labels[val - q.min]
+                return (
+                  <div key={q.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f3f4f6' }}>
+                    <span style={{ color: '#555', fontSize: '0.82rem' }}>{q.label}</span>
+                    <strong style={{ color: '#3C3C3C' }}>{val} — {lbl}</strong>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PageWrapper({ children }) {
+  return (
+    <>
+      <Head>
+        <title>Questionnaire Santé Mentale — ESM</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+      </Head>
+      <div style={{ minHeight: '100vh', background: '#f5f7fa' }}>
+        <div style={{ background: '#3C3C3C', borderBottom: '4px solid #C5D400', padding: '10px 20px', textAlign: 'center' }}>
+          <span style={{ color: '#C5D400', fontWeight: 700, fontSize: '1rem', letterSpacing: '0.04em' }}>ESM — Excellence Sportive Montérégie</span>
+        </div>
+        <div style={{ maxWidth: 680, margin: '32px auto', padding: '0 16px' }}>
+          {children}
+        </div>
+      </div>
+    </>
+  )
+}
+
+const styles = {
+  card: { background: '#fff', borderRadius: 16, boxShadow: '0 2px 12px rgba(0,0,0,0.09)', overflow: 'hidden', marginBottom: 24 },
+  headerBand: { background: '#3C3C3C', padding: '24px', borderBottom: '3px solid #C5D400' },
+  title: { color: '#C5D400', fontSize: '1.4rem', fontWeight: 700 },
+  subtitle: { color: 'rgba(255,255,255,0.7)', marginTop: 4, fontSize: '0.85rem' },
+  section: { padding: '20px 24px', borderBottom: '1px solid #f3f4f6' },
+  confidentialSection: { background: '#faf5ff', borderLeft: '3px solid #7c3aed' },
+  sectionTitle: { color: '#3C3C3C', fontWeight: 700, marginBottom: 16, fontSize: '1rem' },
+}

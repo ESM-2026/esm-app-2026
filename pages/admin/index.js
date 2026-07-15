@@ -344,4 +344,229 @@ export default function Admin() {
         <div>
           <div className="card">
             <h3 style={{ marginBottom: 16 }}>Créer une équipe</h3>
-            <form on
+            <form onSubmit={createTeam} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 160 }}>
+                <label>Nom de l'équipe *</label>
+                <input type="text" value={newTeam.name} onChange={e => setNewTeam({ ...newTeam, name: e.target.value })} required />
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 140 }}>
+                <label>Région</label>
+                <input type="text" value={newTeam.region} onChange={e => setNewTeam({ ...newTeam, region: e.target.value })} />
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 140 }}>
+                <label>École / Club</label>
+                <input type="text" value={newTeam.school} onChange={e => setNewTeam({ ...newTeam, school: e.target.value })} />
+              </div>
+              <button type="submit" className="btn btn-primary">Créer</button>
+            </form>
+          </div>
+
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Équipe</th>
+                  <th>Région</th>
+                  <th>Entraîneurs</th>
+                  <th>Spécialistes</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teams.map(t => (
+                  <tr key={t.id}>
+                    <td><strong>{t.name}</strong></td>
+                    <td style={{ fontSize: '0.85rem', color: '#666' }}>{t.region || '—'}</td>
+                    <td style={{ fontSize: '0.85rem' }}>
+                      {(teamCoachMap[t.id] || []).map(c => (
+                        <span key={c.id} style={{ marginRight: 6, background: '#f0fdf4', color: '#166534', borderRadius: 12, padding: '2px 8px', fontSize: '0.78rem' }}>{c.username}</span>
+                      ))}
+                      {!(teamCoachMap[t.id] || []).length && <span style={{ color: '#ccc' }}>—</span>}
+                    </td>
+                    <td style={{ fontSize: '0.85rem' }}>
+                      {(teamSpecMap[t.id] || []).map(s => (
+                        <span key={s.id} style={{ marginRight: 6, background: '#f3e8ff', color: '#6d28d9', borderRadius: 12, padding: '2px 8px', fontSize: '0.78rem' }}>
+                          {s.username}{s.can_view_confidential ? ' 🔒' : ''}
+                        </span>
+                      ))}
+                      {!(teamSpecMap[t.id] || []).length && <span style={{ color: '#ccc' }}>—</span>}
+                    </td>
+                    <td>
+                      <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '0.8rem' }} onClick={() => deleteTeam(t.id)}>Supprimer</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── ATHLÈTES ── */}
+      {tab === 'athletes' && (
+        <div>
+          <div className="card">
+            <h3 style={{ marginBottom: 16 }}>Ajouter un athlète</h3>
+            <form onSubmit={createAthlete} style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Prénom *</label>
+                <input type="text" value={newAthlete.first_name} onChange={e => setNewAthlete({ ...newAthlete, first_name: e.target.value })} required />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Nom *</label>
+                <input type="text" value={newAthlete.last_name} onChange={e => setNewAthlete({ ...newAthlete, last_name: e.target.value })} required />
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>Équipe</label>
+                <select value={newAthlete.team_id} onChange={e => setNewAthlete({ ...newAthlete, team_id: e.target.value })}>
+                  <option value="">— Aucune —</option>
+                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0 }}>
+                <label>PIN (optionnel)</label>
+                <input type="text" value={newAthlete.pin} onChange={e => setNewAthlete({ ...newAthlete, pin: e.target.value })} placeholder="Ex: 1234" maxLength={6} />
+              </div>
+              <div style={{ display: 'flex', alignItems: 'flex-end' }}>
+                <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Ajouter</button>
+              </div>
+            </form>
+          </div>
+
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Athlète</th>
+                  <th>Équipe</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {athletes.map(a => {
+                  const team = teams.find(t => t.id === a.team_id)
+                  return (
+                    <tr key={a.id}>
+                      <td><strong>{a.last_name}, {a.first_name}</strong></td>
+                      <td>
+                        {team
+                          ? <span style={{ background: '#f0f9ff', color: '#0369a1', borderRadius: 12, padding: '2px 8px', fontSize: '0.82rem' }}>{team.name}</span>
+                          : <span style={{ color: '#ccc' }}>—</span>
+                        }
+                      </td>
+                      <td>
+                        <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '0.8rem' }} onClick={() => deleteAthlete(a.id)}>Supprimer</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── ASSIGNATIONS ── */}
+      {tab === 'assign' && (
+        <div>
+          {/* Coaches */}
+          <div className="card">
+            <h3 style={{ marginBottom: 16 }}>Assigner un entraîneur à une équipe</h3>
+            <form onSubmit={assignCoach} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 160 }}>
+                <label>Équipe</label>
+                <select value={assignCoachForm.team_id} onChange={e => setAssignCoachForm({ ...assignCoachForm, team_id: e.target.value })} required>
+                  <option value="">— Choisir —</option>
+                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 160 }}>
+                <label>Entraîneur</label>
+                <select value={assignCoachForm.coach_id} onChange={e => setAssignCoachForm({ ...assignCoachForm, coach_id: e.target.value })} required>
+                  <option value="">— Choisir —</option>
+                  {coaches.map(c => <option key={c.id} value={c.id}>{c.username}</option>)}
+                </select>
+              </div>
+              <button type="submit" className="btn btn-primary">Assigner</button>
+            </form>
+          </div>
+
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr><th>Équipe</th><th>Entraîneur</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {teamCoaches.map((tc, i) => {
+                  const team = teams.find(t => t.id === tc.team_id)
+                  const coach = accounts.find(a => a.id === tc.coach_id)
+                  if (!team || !coach) return null
+                  return (
+                    <tr key={i}>
+                      <td>{team.name}</td>
+                      <td>{coach.username}</td>
+                      <td>
+                        <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '0.8rem' }} onClick={() => removeCoachAssignment(tc.team_id, tc.coach_id)}>Retirer</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Spécialistes */}
+          <div className="card" style={{ marginTop: 8 }}>
+            <h3 style={{ marginBottom: 16 }}>Assigner un spécialiste à une équipe</h3>
+            <form onSubmit={assignSpecialist} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 160 }}>
+                <label>Équipe</label>
+                <select value={assignSpecForm.team_id} onChange={e => setAssignSpecForm({ ...assignSpecForm, team_id: e.target.value })} required>
+                  <option value="">— Choisir —</option>
+                  {teams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+              <div className="form-group" style={{ margin: 0, flex: 1, minWidth: 160 }}>
+                <label>Spécialiste</label>
+                <select value={assignSpecForm.specialist_id} onChange={e => setAssignSpecForm({ ...assignSpecForm, specialist_id: e.target.value })} required>
+                  <option value="">— Choisir —</option>
+                  {specialists.map(s => <option key={s.id} value={s.id}>{s.username}{s.can_view_confidential ? ' 🔒' : ''}</option>)}
+                </select>
+              </div>
+              <button type="submit" className="btn btn-primary">Assigner</button>
+            </form>
+          </div>
+
+          <div className="card" style={{ padding: 0 }}>
+            <table>
+              <thead>
+                <tr><th>Équipe</th><th>Spécialiste</th><th>Confidentiel</th><th>Actions</th></tr>
+              </thead>
+              <tbody>
+                {teamSpecialists.map((ts, i) => {
+                  const team = teams.find(t => t.id === ts.team_id)
+                  const spec = accounts.find(a => a.id === ts.specialist_id)
+                  if (!team || !spec) return null
+                  return (
+                    <tr key={i}>
+                      <td>{team.name}</td>
+                      <td>{spec.username}</td>
+                      <td>
+                        <span style={{ fontSize: '0.8rem', color: spec.can_view_confidential ? '#6d28d9' : '#9ca3af' }}>
+                          {spec.can_view_confidential ? '🔒 Oui' : '🔓 Non'}
+                        </span>
+                      </td>
+                      <td>
+                        <button className="btn btn-danger" style={{ padding: '4px 12px', fontSize: '0.8rem' }} onClick={() => removeSpecialistAssignment(ts.team_id, ts.specialist_id)}>Retirer</button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Layout>
+  )
+}

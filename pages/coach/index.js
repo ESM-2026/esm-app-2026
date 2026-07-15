@@ -324,4 +324,280 @@ export default function CoachDashboard() {
                       <td style={{ textAlign: 'center', minWidth: 140 }}>
                         {physicalStatus === 'red' && (
                           <div>
-                            <span style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'n
+                            <span style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              🔴 Aucune pratique
+                            </span>
+                            {physicalNote && (
+                              <div style={{ marginTop: 4, fontSize: '0.72rem', color: '#991b1b', fontStyle: 'italic', maxWidth: 160, textAlign: 'left' }}>
+                                {physicalNote}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {physicalStatus === 'yellow' && (
+                          <div>
+                            <span style={{ background: '#fef9c3', color: '#854d0e', border: '1px solid #ca8a04', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              🟡 Avec restrictions
+                            </span>
+                            {physicalNote && (
+                              <div style={{ marginTop: 4, fontSize: '0.72rem', color: '#854d0e', fontStyle: 'italic', maxWidth: 160, textAlign: 'left' }}>
+                                {physicalNote}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                        {physicalStatus === 'green' && (
+                          <span style={{ background: '#dcfce7', color: '#166534', border: '1px solid #16a34a', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                            🟢 Sans restriction
+                          </span>
+                        )}
+                        {!physicalStatus && <span style={{ color: '#999', fontSize: '0.8rem' }}>—</span>}
+                      </td>
+                      <td style={{ textAlign: 'center' }}>
+                        {(() => {
+                          const val = last?.q_general
+                          const c = generalColor(val)
+                          return val != null
+                            ? <span style={{ background: c.bg, color: c.text, padding: '3px 8px', borderRadius: 12, fontSize: '0.78rem', fontWeight: 700 }}>
+                                {GENERAL_LABELS[val]}
+                              </span>
+                            : <span style={{ color: '#999' }}>—</span>
+                        })()}
+                      </td>
+                      <td style={{ fontSize: '0.8rem', color: '#888' }}>
+                        {lastDate ? new Date(lastDate).toLocaleDateString('fr-CA') : '—'}
+                      </td>
+                      {COACH_QUESTIONS.map(q => {
+                        const d = devs[q]
+                        const color = devColor(d)
+                        return (
+                          <td key={q} style={{
+                            textAlign: 'center',
+                            background: color === 'red' ? '#fee2e2' : color === 'yellow' ? '#fef9c3' : color === 'green' ? '#dcfce7' : 'transparent',
+                            fontWeight: 600,
+                            color: color === 'red' ? '#991b1b' : color === 'yellow' ? '#854d0e' : color === 'green' ? '#166534' : '#999',
+                            fontSize: '0.85rem',
+                          }}>
+                            {d != null ? (d > 0 ? `+${d}` : d) : '—'}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))
+                }
+              </tbody>
+            </table>
+          )}
+          <div style={{ padding: '10px 16px', fontSize: '0.78rem', color: '#888', borderTop: '1px solid #eee' }}>
+            Écart = score récent − moyenne historique. 🟢 ≥ −0.4 · 🟡 −0.5 à −0.9 · 🔴 ≤ −1.0
+          </div>
+        </div>
+      )}
+
+      {/* ── TAB: JOURNAUX ── */}
+      {tab === 'journal' && (
+        <div>
+          <div style={{ marginBottom: 16, display: 'flex', gap: 10 }}>
+            <button className={`btn ${journalFilter === 'all' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setJournalFilter('all')}>Tous</button>
+            <button className={`btn ${journalFilter === 'unread' ? 'btn-primary' : 'btn-outline'}`} onClick={() => setJournalFilter('unread')}>Sans réponse</button>
+          </div>
+
+          {athleteData.length === 0 && <p style={{ color: '#888' }}>Aucun athlète dans cette équipe.</p>}
+
+          {athleteData
+            .slice()
+            .sort((a, b) => a.athlete.last_name.localeCompare(b.athlete.last_name))
+            .map(({ athlete }) => {
+              const allEntries = journalEntries.filter(e => e.athlete_id === athlete.id)
+              const visibleEntries = journalFilter === 'unread'
+                ? allEntries.filter(e => !e.coach_response)
+                : allEntries
+              const hasAny = allEntries.length > 0
+              const hasVisible = visibleEntries.length > 0
+
+              return (
+                <div key={athlete.id} style={{ marginBottom: 12 }}>
+                  <div style={{
+                    background: '#f0f4f8',
+                    borderRadius: hasVisible ? '10px 10px 0 0' : 10,
+                    padding: '10px 16px',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                  }}>
+                    <strong style={{ color: '#3C3C3C' }}>{athlete.last_name}, {athlete.first_name}</strong>
+                    <span style={{ fontSize: '0.78rem', color: '#6b7280' }}>
+                      {!hasAny
+                        ? <em>Non complété</em>
+                        : journalFilter === 'unread' && !hasVisible
+                          ? <em style={{ color: '#16a34a' }}>✓ Tous répondus</em>
+                          : `${allEntries.length} entrée${allEntries.length > 1 ? 's' : ''}`
+                      }
+                    </span>
+                  </div>
+                  {visibleEntries.map(entry => (
+                    <JournalCard
+                      key={entry.id}
+                      entry={entry}
+                      replyText={replyText[entry.id] || ''}
+                      onReplyChange={t => setReplyText(prev => ({ ...prev, [entry.id]: t }))}
+                      onSendReply={() => sendReply(entry.id)}
+                    />
+                  ))}
+                </div>
+              )
+            })
+          }
+        </div>
+      )}
+
+      {/* ── TAB: CONFIGURATION JOURNAL ── */}
+      {tab === 'config' && (
+        <div>
+          <div className="card">
+            <h3 style={{ marginBottom: 16, color: '#3C3C3C' }}>Questions actives dans le journal</h3>
+            {allQuestions.length === 0 && <p style={{ color: '#888' }}>Aucune question disponible.</p>}
+            {allQuestions.map(q => (
+              <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid #f0f0f0' }}>
+                <input
+                  type="checkbox"
+                  checked={coachConfig.includes(q.id)}
+                  onChange={e => saveCoachConfig(q.id, e.target.checked)}
+                  style={{ accentColor: '#C5D400', width: 18, height: 18, flexShrink: 0 }}
+                />
+                <div style={{ flex: 1 }}>
+                  <span style={{ fontSize: '0.9rem' }}>{q.label}</span>
+                  <span style={{ marginLeft: 8, fontSize: '0.75rem', color: '#9ca3af' }}>[{q.section}]</span>
+                </div>
+                {!q.is_predefined && (
+                  <button className="btn btn-danger" style={{ padding: '3px 10px', fontSize: '0.78rem' }} onClick={() => deleteQuestion(q.id)}>
+                    Supprimer
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <h3 style={{ marginBottom: 16, color: '#3C3C3C' }}>Créer une nouvelle question</h3>
+            <form onSubmit={createQuestion}>
+              <div className="form-group">
+                <label>Libellé de la question *</label>
+                <input type="text" value={newQ.label} onChange={e => setNewQ({ ...newQ, label: e.target.value })} placeholder="Ex: Comment te sens-tu physiquement?" required />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                <div className="form-group">
+                  <label>Section</label>
+                  <select value={newQ.section} onChange={e => setNewQ({ ...newQ, section: e.target.value })}>
+                    <option value="entrainement">Entraînement</option>
+                    <option value="nutrition">Nutrition</option>
+                    <option value="sante">Santé & bien-être</option>
+                    <option value="objectifs">Objectifs</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label>Type de réponse</label>
+                  <select value={newQ.input_type} onChange={e => setNewQ({ ...newQ, input_type: e.target.value })}>
+                    <option value="textarea">Texte libre</option>
+                    <option value="slider">Curseur (1-10)</option>
+                    <option value="number">Nombre</option>
+                    <option value="radio">Choix unique</option>
+                    <option value="checkbox">Choix multiples</option>
+                    <option value="toggle">Oui / Non</option>
+                  </select>
+                </div>
+              </div>
+              {newQ.input_type === 'slider' && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="form-group">
+                    <label>Min</label>
+                    <input type="number" value={newQ.min_val} onChange={e => setNewQ({ ...newQ, min_val: e.target.value })} />
+                  </div>
+                  <div className="form-group">
+                    <label>Max</label>
+                    <input type="number" value={newQ.max_val} onChange={e => setNewQ({ ...newQ, max_val: e.target.value })} />
+                  </div>
+                </div>
+              )}
+              {['radio', 'checkbox'].includes(newQ.input_type) && (
+                <div className="form-group">
+                  <label>Options (une par champ)</label>
+                  {newQ.options.map((opt, i) => (
+                    <div key={i} style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                      <input type="text" value={opt} onChange={e => { const o = [...newQ.options]; o[i] = e.target.value; setNewQ({ ...newQ, options: o }) }} placeholder={`Option ${i + 1}`} />
+                      {newQ.options.length > 1 && (
+                        <button type="button" className="btn btn-danger" style={{ padding: '4px 10px' }} onClick={() => { const o = newQ.options.filter((_, j) => j !== i); setNewQ({ ...newQ, options: o }) }}>✕</button>
+                      )}
+                    </div>
+                  ))}
+                  <button type="button" className="btn btn-outline" style={{ marginTop: 4, fontSize: '0.85rem' }} onClick={() => setNewQ({ ...newQ, options: [...newQ.options, ''] })}>+ Ajouter une option</button>
+                </div>
+              )}
+              {newQMsg && <div className={`alert ${newQMsg.startsWith('✅') ? 'alert-success' : 'alert-error'}`}>{newQMsg}</div>}
+              <button type="submit" className="btn btn-primary">Créer la question</button>
+            </form>
+          </div>
+        </div>
+      )}
+    </Layout>
+  )
+}
+
+function JournalCard({ entry, replyText, onReplyChange, onSendReply }) {
+  const [open, setOpen] = useState(false)
+  const athlete = entry.athletes || {}
+  const responses = entry.journal_responses || []
+
+  function displayValue(r) {
+    if (r.value_text) return r.value_text
+    if (r.value_number != null) return String(r.value_number)
+    if (r.value_array && r.value_array.length > 0) return r.value_array.join(', ')
+    return '—'
+  }
+
+  return (
+    <div style={{ border: '1px solid #e5e7eb', borderRadius: open ? '0 0 10px 10px' : 10, marginTop: 0, overflow: 'hidden', borderTop: 'none' }}>
+      <div
+        style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', background: open ? '#f0f7ff' : '#fafafa' }}
+        onClick={() => setOpen(!open)}
+      >
+        <div>
+          <span style={{ fontSize: '0.82rem', color: '#555' }}>Semaine du {entry.week_start}</span>
+          {entry.coach_response && <span style={{ marginLeft: 10, fontSize: '0.75rem', color: '#16a34a', fontWeight: 600 }}>✓ Répondu</span>}
+          {!entry.coach_response && <span style={{ marginLeft: 10, fontSize: '0.75rem', color: '#ef4444', fontWeight: 600 }}>● En attente</span>}
+        </div>
+        <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>{open ? '▲' : '▼'}</span>
+      </div>
+      {open && (
+        <div style={{ padding: 16, borderTop: '1px solid #e5e7eb', fontSize: '0.88rem' }}>
+          {responses.map(r => (
+            <div key={r.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #f3f4f6' }}>
+              <div style={{ fontWeight: 600, color: '#374151', fontSize: '0.82rem' }}>{r.journal_questions?.label || 'Question'}</div>
+              <div style={{ color: '#1a1a1a', marginTop: 3 }}>{displayValue(r)}</div>
+            </div>
+          ))}
+          {entry.coach_response && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 8, padding: '10px 12px', marginTop: 8 }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#166534', textTransform: 'uppercase', marginBottom: 4 }}>Ta réponse</div>
+              <p style={{ color: '#166534', fontSize: '0.88rem', margin: 0 }}>{entry.coach_response}</p>
+            </div>
+          )}
+          {!entry.coach_response && (
+            <div style={{ marginTop: 10 }}>
+              <textarea
+                value={replyText}
+                onChange={e => onReplyChange(e.target.value)}
+                placeholder="Écrire une réponse à cet athlète…"
+                rows={2}
+                style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #d0d5dd', fontSize: '0.88rem', resize: 'vertical' }}
+              />
+              <button className="btn btn-primary" style={{ marginTop: 6, padding: '6px 16px', fontSize: '0.85rem' }} onClick={onSendReply} disabled={!replyText?.trim()}>
+                Envoyer
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
