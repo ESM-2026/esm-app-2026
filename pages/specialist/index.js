@@ -55,6 +55,12 @@ export default function SpecialistView() {
   const [noteSaved, setNoteSaved] = useState({})               // {athleteId: 'saved'|'error'|false}
   const [statusMsg, setStatusMsg] = useState({})               // {athleteId: string} message d'erreur statut
 
+  // ── Messages capacité physique ──────────────────────────────
+  const [physMsgs, setPhysMsgs] = useState({})      // {athleteId: [{id,sender_role,message,sent_at,read_at}]}
+  const [physMsgText, setPhysMsgText] = useState({}) // {athleteId: texte en cours
+  const [physMsgOpen, setPhysMsgOpen] = useState({}) // {athleteId: bool}
+  const [physMsgSending, setPhysMsgSending] = useState({})
+
   useEffect(() => {
     const u = getSession()
     if (!u || u.role !== 'specialist') { router.push('/login'); return }
@@ -113,6 +119,53 @@ export default function SpecialistView() {
       setResponses(recs || [])
     }
     setLoading(false)
+
+    // Charger les messages capacité physique
+    if (ath && ath.length > 0) {
+      loadPhysicalMessages(ath.map(a => a.id))
+    }
+  }
+
+  async function loadPhysicalMessages(ids) {
+    if (!ids || ids.length === 0) return
+    const { data } = await supabase
+      .from('physical_capacity_messages')
+      .select('id, athlete_id, sender_id, sender_role, message, sent_at, read_at')
+      .in('athlete_id', ids)
+      .order('sent_at', { ascending: true })
+
+    const map = {}
+    for (const id of ids) map[id] = []
+    for (const msg of (data || [])) {
+      if (!map[msg.athlete_id]) map[msg.athlete_id] = []
+      map[msg.athlete_id].push(msg)
+    }
+    setPhysMsgs(map)
+
+    // Marquer les messages du coach comme lus par le spécialiste
+    const unreadIds = (data || [])
+      .filter(m => m.sender_role === 'coach' && !m.read_at)
+      .map(m => m.id)
+    if (unreadIds.length > 0) {
+      await supabase
+        .from('physical_capacity_messages')
+        .update({ read_at: new Date().toISOString() })
+        .in('id', unreadIds)
+    }
+  }
+
+  async function sendPhysicalMessage(athleteId) {
+    const text = (physMsgText[athleteId] || '').trim()
+    if (!text) return
+    setPhysMsgSending(prev => ({ ...prev, [athleteId]: true }))
+    const { error } = await supabase
+      .from('physical_capacity_messages')
+      .insert({ athlete_id: athleteId, sender_id: user?.id, sender_role: 'specialist', message: text })
+    if (!error) {
+      setPhysMsgText(prev => ({ ...prev, [athleteId]: '' }))
+      await loadPhysicalMessages(athletes.map(a => a.id))
+    }
+    setPhysMsgSending(prev => ({ ...prev, [athleteId]: false }))
   }
 
   function handleTeamChange(e) {
@@ -324,6 +377,98 @@ export default function SpecialistView() {
                 </div>
               </div>
             )}
+
+            {/* ── Messagerie coach ↔ spécialiste ─────────────── */}
+            {(() => {
+              const msgs = physMsgs[athlete.id] || []
+              const unread = msgs.filter(m => m.sender_role === 'coach' && !m.read_at).length
+              const isOpen = physMsgOpen[athlete.id]
+              const isSendingMsg = physMsgSending[athlete.id]
+              return (
+                <div style={{ marginTop: 12, borderTop: '1px solid #e5e7eb', paddingTop: 12 }}>
+                  <button
+                    onClick={() => setPhysMsgOpen(prev => ({ ...prev, [athlete.id]: !prev[athlete.id] }))}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      display: 'flex', alignItems: 'center', gap: 8,
+                      fontSize: '0.85rem', fontWeight: 600, color: '#7c3aed', padding: 0,
+                    }}
+                  >
+                    💬 Messages de l'entraîneur
+                    {unread > 0 && (
+                      <span style={{ background: '#7c3aed', color: '#fff', borderRadius: 20, padding: '1px 8px', fontSize: '0.75rem', fontWeight: 700 }}>
+                        {unread} nouveau{unread > 1 ? 'x' : ''}
+                      </span>
+                    )}
+                    <span style={{ fontSize: '0.75rem', color: '#9ca3af' }}>{isOpen ? '▲' : '▼'}</span>
+                  </button>
+
+                  {isOpen && (
+                    <div style={{ marginTop: 10 }}>
+                      {/* Fil de messages */}
+                      <div style={{
+                        maxHeight: 260, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 8,
+                        padding: '10px', background: '#faf5ff', borderRadius: 8, marginBottom: 10,
+                        border: '1px solid #e9d5ff',
+                      }}>
+                        {msgs.length === 0 && (
+                          <p style={{ color: '#9ca3af', fontSize: '0.82rem', textAlign: 'center', margin: 0 }}>
+                            Aucun message pour cet athlète.
+                          </p>
+                        )}
+                        {msgs.map(msg => {
+                          const isCoach = msg.sender_role === 'coach'
+                          return (
+                            <div key={msg.id} style={{ display: 'flex', justifyContent: isCoach ? 'flex-start' : 'flex-end' }}>
+                              <div style={{
+                                maxWidth: '78%', padding: '8px 12px', borderRadius: 12,
+                                background: isCoach ? '#ede9fe' : '#ddf4ff',
+                                color: isCoach ? '#4c1d95' : '#1e40af',
+                                border: `1px solid ${isCoach ? '#c4b5fd' : '#bfdbfe'}`,
+                                fontSize: '0.85rem',
+                              }}>
+                                <div style={{ fontWeight: 700, fontSize: '0.72rem', marginBottom: 3, opacity: 0.75 }}>
+                                  {isCoach ? '🧑‍💼 Entraîneur' : '🏥 Vous'}
+                                  {' · '}
+                                  {new Date(msg.sent_at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                {msg.message}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+
+                      {/* Zone de réponse */}
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                        <textarea
+                          value={physMsgText[athlete.id] || ''}
+                          onChange={e => setPhysMsgText(prev => ({ ...prev, [athlete.id]: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendPhysicalMessage(athlete.id) } }}
+                          placeholder="Répondre à l'entraîneur… (Entrée pour envoyer)"
+                          rows={2}
+                          style={{
+                            flex: 1, resize: 'none', borderRadius: 8, padding: '8px 10px',
+                            border: '1px solid #c4b5fd', fontSize: '0.85rem', boxSizing: 'border-box',
+                          }}
+                        />
+                        <button
+                          onClick={() => sendPhysicalMessage(athlete.id)}
+                          disabled={isSendingMsg || !(physMsgText[athlete.id] || '').trim()}
+                          style={{
+                            background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8,
+                            padding: '8px 16px', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 700,
+                            opacity: (isSendingMsg || !(physMsgText[athlete.id] || '').trim()) ? 0.5 : 1,
+                          }}
+                        >
+                          {isSendingMsg ? '…' : 'Envoyer'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
 
             {/* Questions confidentielles — seulement si autorisé */}
             {canViewConfidential && response && (

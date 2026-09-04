@@ -71,6 +71,12 @@ export default function CoachDashboard() {
   const [newAthleteMsg, setNewAthleteMsg] = useState('')
   const [showAddAthlete, setShowAddAthlete] = useState(false)
 
+  // ── Messages capacité physique ──────────────────────────────
+  const [physMsgs, setPhysMsgs] = useState({})      // {athleteId: [{id,sender_role,message,sent_at,read_at}]}
+  const [physMsgText, setPhysMsgText] = useState({}) // {athleteId: texte en cours}
+  const [physMsgOpen, setPhysMsgOpen] = useState({}) // {athleteId: bool}
+  const [physMsgSending, setPhysMsgSending] = useState({})
+
   // ── RPE state ───────────────────────────────────────────────
   const [rpeData, setRpeData] = useState([])        // [{athleteId, name, rpe}]
   const [prevWeekAvg, setPrevWeekAvg] = useState(null)
@@ -140,8 +146,9 @@ export default function CoachDashboard() {
 
     setAthleteData(result)
 
-    // Load RPE pour la semaine en cours
+    // Load RPE et messages capacité physique
     loadRPEData(athletes, getMondayOf(new Date()))
+    loadPhysicalMessages(ids)
 
     // Load journals
     const { data: entries } = await supabase
@@ -152,6 +159,48 @@ export default function CoachDashboard() {
       .limit(100)
     setJournalEntries(entries || [])
     setLoading(false)
+  }
+
+  async function loadPhysicalMessages(ids) {
+    if (!ids || ids.length === 0) return
+    const { data } = await supabase
+      .from('physical_capacity_messages')
+      .select('id, athlete_id, sender_role, message, sent_at, read_at')
+      .in('athlete_id', ids)
+      .order('sent_at', { ascending: true })
+    const map = {}
+    for (const msg of (data || [])) {
+      if (!map[msg.athlete_id]) map[msg.athlete_id] = []
+      map[msg.athlete_id].push(msg)
+    }
+    setPhysMsgs(map)
+
+    // Marquer les messages spécialiste comme lus
+    const unread = (data || []).filter(m => m.sender_role === 'specialist' && !m.read_at).map(m => m.id)
+    if (unread.length > 0) {
+      await supabase.from('physical_capacity_messages').update({ read_at: new Date().toISOString() }).in('id', unread)
+    }
+  }
+
+  async function sendPhysicalMessage(athleteId) {
+    const text = physMsgText[athleteId]?.trim()
+    if (!text || !user) return
+    setPhysMsgSending(prev => ({ ...prev, [athleteId]: true }))
+    await supabase.from('physical_capacity_messages').insert([{
+      athlete_id: athleteId,
+      sender_id: user.id,
+      sender_role: 'coach',
+      message: text,
+    }])
+    setPhysMsgText(prev => ({ ...prev, [athleteId]: '' }))
+    // Recharger les messages pour cet athlète
+    const { data } = await supabase
+      .from('physical_capacity_messages')
+      .select('id, athlete_id, sender_role, message, sent_at, read_at')
+      .eq('athlete_id', athleteId)
+      .order('sent_at', { ascending: true })
+    setPhysMsgs(prev => ({ ...prev, [athleteId]: data || [] }))
+    setPhysMsgSending(prev => ({ ...prev, [athleteId]: false }))
   }
 
   async function loadRPEData(athletesList, weekStart) {
@@ -514,31 +563,122 @@ export default function CoachDashboard() {
                       : { emoji: '⚪', label: 'Non renseigné',     bg: '#f9fafb', text: '#9ca3af', border: '#e5e7eb' }
                     return (
                       <div key={athlete.id} style={{
-                        display: 'flex', alignItems: 'flex-start', gap: 14,
                         background: cfg.bg, border: `1px solid ${cfg.border}`,
                         borderRadius: 10, padding: '12px 16px',
                       }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 700, color: '#1A1B18', fontSize: '0.95rem' }}>
-                            {athlete.last_name}, {athlete.first_name}
-                          </div>
-                          {physicalNote && (
-                            <div style={{ marginTop: 4, fontSize: '0.82rem', color: cfg.text, fontStyle: 'italic' }}>
-                              {physicalNote}
+                        {/* En-tête : nom + badge */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontWeight: 700, color: '#1A1B18', fontSize: '0.95rem' }}>
+                              {athlete.last_name}, {athlete.first_name}
                             </div>
-                          )}
+                            {physicalNote && (
+                              <div style={{ marginTop: 4, fontSize: '0.82rem', color: cfg.text, fontStyle: 'italic' }}>
+                                {physicalNote}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{
+                            background: 'white', border: `1px solid ${cfg.border}`,
+                            borderRadius: 20, padding: '3px 12px',
+                            fontSize: '0.78rem', fontWeight: 700, color: cfg.text,
+                            whiteSpace: 'nowrap', flexShrink: 0,
+                          }}>
+                            {cfg.emoji} {cfg.label}
+                          </span>
                         </div>
-                        <span style={{
-                          background: 'white', border: `1px solid ${cfg.border}`,
-                          borderRadius: 20, padding: '3px 12px',
-                          fontSize: '0.78rem', fontWeight: 700, color: cfg.text,
-                          whiteSpace: 'nowrap', flexShrink: 0,
-                        }}>
-                          {cfg.emoji} {cfg.label}
-                        </span>
-                      </div>
-                    )
-                  })
+
+                        {/* Fil de messages */}
+                      {(() => {
+                        const msgs = physMsgs[athlete.id] || []
+                        const unread = msgs.filter(m => m.sender_role === 'specialist' && !m.read_at).length
+                        const isOpen = physMsgOpen[athlete.id]
+                        return (
+                          <div style={{ marginTop: 10, borderTop: `1px solid ${cfg.border}`, paddingTop: 10 }}>
+                            <button
+                              onClick={() => setPhysMsgOpen(prev => ({ ...prev, [athlete.id]: !prev[athlete.id] }))}
+                              style={{
+                                background: 'none', border: 'none', cursor: 'pointer',
+                                fontSize: '0.82rem', fontWeight: 600, color: '#6B7069',
+                                display: 'flex', alignItems: 'center', gap: 6, padding: 0,
+                              }}
+                            >
+                              💬 Message au spécialiste
+                              {unread > 0 && (
+                                <span style={{ background: '#C5D400', color: '#1A1B18', borderRadius: 10, padding: '1px 7px', fontSize: '0.72rem', fontWeight: 800 }}>
+                                  {unread} nouveau{unread > 1 ? 'x' : ''}
+                                </span>
+                              )}
+                              {msgs.length > 0 && unread === 0 && (
+                                <span style={{ color: '#9ca3af', fontSize: '0.75rem' }}>({msgs.length})</span>
+                              )}
+                              <span style={{ color: '#9ca3af' }}>{isOpen ? '▲' : '▼'}</span>
+                            </button>
+
+                            {isOpen && (
+                              <div style={{ marginTop: 10 }}>
+                                {/* Historique */}
+                                {msgs.length > 0 && (
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10, maxHeight: 220, overflowY: 'auto', paddingRight: 4 }}>
+                                    {msgs.map(m => (
+                                      <div key={m.id} style={{
+                                        display: 'flex',
+                                        justifyContent: m.sender_role === 'coach' ? 'flex-end' : 'flex-start',
+                                      }}>
+                                        <div style={{
+                                          maxWidth: '80%',
+                                          background: m.sender_role === 'coach' ? '#f0f7e6' : '#f0f4ff',
+                                          border: m.sender_role === 'coach' ? '1px solid #C5D400' : '1px solid #a5b4fc',
+                                          borderRadius: 10,
+                                          padding: '7px 12px',
+                                          fontSize: '0.82rem',
+                                        }}>
+                                          <div style={{ fontWeight: 600, fontSize: '0.7rem', color: m.sender_role === 'coach' ? '#3C3C3C' : '#4338ca', marginBottom: 2 }}>
+                                            {m.sender_role === 'coach' ? 'Vous' : '🏥 Spécialiste'}
+                                          </div>
+                                          <div style={{ color: '#1A1B18' }}>{m.message}</div>
+                                          <div style={{ fontSize: '0.68rem', color: '#9ca3af', marginTop: 3, textAlign: 'right' }}>
+                                            {new Date(m.sent_at).toLocaleDateString('fr-CA', { day: 'numeric', month: 'short' })}
+                                            {' '}
+                                            {new Date(m.sent_at).toLocaleTimeString('fr-CA', { hour: '2-digit', minute: '2-digit' })}
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                {msgs.length === 0 && (
+                                  <p style={{ fontSize: '0.8rem', color: '#9ca3af', fontStyle: 'italic', marginBottom: 8 }}>
+                                    Aucun message pour cet athlète.
+                                  </p>
+                                )}
+
+                                {/* Saisie */}
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                  <textarea
+                                    value={physMsgText[athlete.id] || ''}
+                                    onChange={e => setPhysMsgText(prev => ({ ...prev, [athlete.id]: e.target.value }))}
+                                    placeholder="Votre question au spécialiste…"
+                                    rows={2}
+                                    style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #d0d5dd', fontSize: '0.82rem', resize: 'vertical' }}
+                                  />
+                                  <button
+                                    className="btn btn-primary"
+                                    style={{ alignSelf: 'flex-end', padding: '7px 14px', fontSize: '0.82rem' }}
+                                    disabled={!physMsgText[athlete.id]?.trim() || physMsgSending[athlete.id]}
+                                    onClick={() => sendPhysicalMessage(athlete.id)}
+                                  >
+                                    {physMsgSending[athlete.id] ? '…' : 'Envoyer'}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  )
+                })
                 }
               </div>
               <div style={{ marginTop: 14, fontSize: '0.75rem', color: '#9ca3af' }}>
