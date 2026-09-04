@@ -4,68 +4,91 @@ import { supabase } from '../lib/supabase'
 import PinGate from '../components/PinGate'
 
 // ── Définition des questions ────────────────────────────────
+const SCALE_MOTIVATION = [
+  '1 — Ne correspond pas du tout',
+  '2 — Correspond très peu',
+  '3 — Correspond un peu',
+  '4 — Correspond moyennement',
+  '5 — Correspond assez',
+  '6 — Correspond fortement',
+  '7 — Correspond très fortement',
+]
+
+const SCALE_FREQUENCE_4 = ['1 — Jamais', '2 — Plusieurs jours', '3 — Plus de la moitié des jours', '4 — Presque tous les jours']
+const SCALE_ACCORD_5    = ["1 — Fortement en désaccord", "2 — Plutôt en désaccord", "3 — Pas sûr / Neutre", "4 — Plutôt en accord", "5 — Tout à fait d'accord"]
+const SCALE_NUTRITION   = ['0 — Aucune fois', '1 — Entre 1 et 2 fois', '2 — Entre 3 et 4 fois', '3 — Entre 5 et 6 fois', '4 — À tous les jours']
+
 const SECTIONS = [
   {
     title: 'Bien-être général',
     questions: [
-      { key: 'q_general', label: 'Comment te sens-tu en général cette semaine?', type: 'scale', min: 1, max: 5, labels: ['Très mal', 'Mal', 'Moyen', 'Bien', 'Très bien'] },
+      {
+        key: 'q_general',
+        label: 'En général, comment évaluerais-tu ta santé mentale?',
+        type: 'scale', min: 1, max: 5,
+        labels: ['1 — Excellente', '2 — Très bonne', '3 — Bonne', '4 — Passable', '5 — Mauvaise'],
+      },
     ],
   },
   {
     title: 'Motivation',
+    preamble: 'En général, pourquoi pratiques-tu ce sport? Indique dans quelle mesure chacun des énoncés suivants correspond à ta situation.',
     questions: [
-      { key: 'q_a', label: "Mon niveau de motivation à l'entraînement", type: 'scale', min: 1, max: 7, labels: ['1', '2', '3', '4', '5', '6', '7'] },
-      { key: 'q_b', label: 'Je me sens capable d\'atteindre mes objectifs', type: 'scale', min: 1, max: 7, labels: ['1', '2', '3', '4', '5', '6', '7'] },
-      { key: 'q_c', label: "L'entraînement me donne de l'énergie", type: 'scale', min: 1, max: 7, labels: ['1', '2', '3', '4', '5', '6', '7'] },
-      { key: 'q_d', label: "J'ai envie de performer", type: 'scale', min: 1, max: 7, labels: ['1', '2', '3', '4', '5', '6', '7'] },
+      { key: 'q_a', label: "Je ne le sais pas; j'ai l'impression que c'est inutile de continuer à faire du sport.", type: 'scale', min: 1, max: 7, labels: SCALE_MOTIVATION },
+      { key: 'q_b', label: "Je n'arrive pas à voir pourquoi je fais du sport; plus j'y pense, plus j'ai le goût de lâcher le milieu sportif.", type: 'scale', min: 1, max: 7, labels: SCALE_MOTIVATION },
+      { key: 'q_c', label: "Je ne le sais pas clairement; de plus, je ne crois pas être vraiment à ma place dans le sport.", type: 'scale', min: 1, max: 7, labels: SCALE_MOTIVATION },
+      { key: 'q_d', label: "Je me le demande bien; je n'arrive pas à atteindre les objectifs que je me fixe.", type: 'scale', min: 1, max: 7, labels: SCALE_MOTIVATION },
     ],
   },
   {
     title: 'Sommeil',
+    preamble: 'Au cours de la dernière semaine, à quelle fréquence as-tu été dérangé(e) par les éléments suivants?',
     questions: [
-      { key: 'q_e', label: 'Qualité de mon sommeil cette semaine', type: 'scale', min: 1, max: 4, labels: ['Très mauvais', 'Mauvais', 'Bon', 'Excellent'] },
+      { key: 'q_e', label: "Difficulté à t'endormir, ou à rester endormi(e), ou trop dormir.", type: 'scale', min: 1, max: 4, labels: SCALE_FREQUENCE_4 },
     ],
   },
   {
-    title: 'Conciliation sport-études',
+    title: 'Conciliation sport-études-social',
+    preamble: 'Dans quelle mesure es-tu en accord ou en désaccord avec les énoncés suivants?',
     questions: [
-      { key: 'q_f', label: "J'arrive à concilier sport et études sans trop de stress", type: 'scale', min: 1, max: 5, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
+      { key: 'q_f', label: "Après le travail, je n'ai pas le temps et/ou l'énergie pour faire mes travaux scolaires et étudier.", type: 'scale', min: 1, max: 5, labels: SCALE_ACCORD_5 },
     ],
   },
   {
     title: 'Anxiété',
     questions: [
-      { key: 'q_g', label: "Mon niveau d'anxiété liée au sport cette semaine", type: 'scale', min: 1, max: 4, labels: ['Aucune', 'Légère', 'Modérée', 'Élevée'] },
+      { key: 'q_g', label: "Je m'inquiète ou je suis stressé(e) lorsque je suis à l'école ou à la maison.", type: 'scale', min: 1, max: 4, labels: ['1 — Jamais', '2 — Parfois', '3 — Souvent', '4 — Toujours'] },
     ],
   },
   {
     title: 'Social',
+    preamble: 'Dans quelle mesure es-tu en accord ou en désaccord avec les énoncés suivants?',
     questions: [
-      { key: 'q_h', label: "Je me sens bien intégré(e) dans mon équipe", type: 'scale', min: 1, max: 5, labels: ['Pas du tout', 'Un peu', 'Moyennement', 'Beaucoup', 'Totalement'] },
+      { key: 'q_h', label: "Les membres de notre équipe ne restent pas ensemble en dehors des entraînements et compétitions.", type: 'scale', min: 1, max: 5, labels: SCALE_ACCORD_5 },
     ],
   },
   {
     title: 'Nutrition',
     questions: [
-      { key: 'q_i', label: 'Petit-déjeuner: je mange suffisamment avant l\'entraînement', type: 'scale', min: 0, max: 4, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
-      { key: 'q_j', label: 'Je m\'hydrate bien pendant l\'entraînement', type: 'scale', min: 0, max: 4, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
-      { key: 'q_k', label: 'Je consomme des fruits/légumes chaque jour', type: 'scale', min: 0, max: 4, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
-      { key: 'q_l', label: 'Je récupère bien après l\'effort (collation, repas)', type: 'scale', min: 0, max: 4, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
-      { key: 'q_m', label: 'Je mange à des heures régulières', type: 'scale', min: 0, max: 4, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
-      { key: 'q_n', label: 'Ma qualité nutritionnelle globale', type: 'scale', min: 0, max: 4, labels: ['Très mauvaise', 'Mauvaise', 'Acceptable', 'Bonne', 'Excellente'] },
-      { key: 'q_o', label: 'Je ressens de la fatigue liée à une mauvaise alimentation', type: 'scale', min: 0, max: 4, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
-      { key: 'q_p', label: 'Je mange selon mes besoins sportifs', type: 'scale', min: 0, max: 4, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
+      { key: 'q_i', label: "Au courant des 7 derniers jours, as-tu volontairement limité la quantité de nourriture que tu manges pour influencer ta taille ou ton poids? (peu importe si tu as réussi ou non)", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
+      { key: 'q_j', label: "Au courant des 7 derniers jours, as-tu tenté d'exclure certains aliments de ton alimentation dans le but d'influencer ta taille ou ton poids? (peu importe si tu as réussi ou non)", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
+      { key: 'q_k', label: "Au courant des 7 derniers jours, à combien de reprises as-tu été insatisfait.e de ton poids?", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
+      { key: 'q_l', label: "Au courant des 7 derniers jours, à combien de reprises as-tu eu des épisodes d'hyperphagie (c.-à-d. manger de très grandes quantités de nourriture et ressentir une perte de contrôle pendant)?", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
+      { key: 'q_m', label: "Au courant des 7 derniers jours, à combien de reprises t'es-tu fait vomir dans un but de contrôler ton poids ou la forme de ton corps (ta shape)?", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
+      { key: 'q_n', label: "Au courant des 7 derniers jours, à combien de reprises as-tu fait de l'exercice de façon « compulsive » ou « excessive » dans un but de contrôler ton poids, la forme de ton corps (ta shape), ton pourcentage de gras ou pour brûler des calories?", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
+      { key: 'q_o', label: "Au courant des 7 derniers jours, à combien de reprises as-tu eu recours à une application mobile pour comptabiliser tes calories ou tes nutriments?", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
+      { key: 'q_p', label: "Au courant des 7 derniers jours, à combien de reprises as-tu eu recours à des suppléments dans le but d'influencer ta taille ou ton poids?", type: 'scale', min: 0, max: 4, labels: SCALE_NUTRITION },
     ],
   },
   {
     title: '🔒 Questions confidentielles',
-    subtitle: 'Ces réponses sont UNIQUEMENT visibles par les professionnels de la santé désignés. Elles ne sont pas accessibles à ton entraîneur.',
+    subtitle: "Ces réponses concernent tes relations avec tes entraîneurs et coéquipiers. Elles sont UNIQUEMENT visibles par les professionnels de la santé désignés par l'ESM. Ton entraîneur n'y a pas accès.",
     confidential: true,
     questions: [
-      { key: 'q_c1', label: "Je ressens de la tristesse ou du vide de façon persistante", type: 'scale', min: 1, max: 4, labels: ['Jamais', 'Parfois', 'Souvent', 'Presque toujours'] },
-      { key: 'q_c2', label: "Je me sens dépassé(e) ou sans espoir", type: 'scale', min: 1, max: 4, labels: ['Jamais', 'Parfois', 'Souvent', 'Presque toujours'] },
-      { key: 'q_c3', label: "Je me sens en sécurité dans mon environnement sportif", type: 'scale', min: 1, max: 5, labels: ['Jamais', 'Rarement', 'Parfois', 'Souvent', 'Toujours'] },
-      { key: 'q_c4', label: "J'ai des pensées qui m'inquiètent et dont je voudrais parler à quelqu'un", type: 'scale', min: 1, max: 4, labels: ['Jamais', 'Parfois', 'Souvent', 'Presque toujours'] },
+      { key: 'q_c1', label: "Au cours de la dernière semaine, à quelle fréquence as-tu vécu un conflit avec ton/tes entraîneurs?", type: 'scale', min: 1, max: 4, labels: SCALE_FREQUENCE_4 },
+      { key: 'q_c2', label: "Au cours de la dernière semaine, à quelle fréquence as-tu vécu un conflit avec un/des coéquipiers/partenaires d'entraînement?", type: 'scale', min: 1, max: 4, labels: SCALE_FREQUENCE_4 },
+      { key: 'q_c3', label: "Mes idées et mes opinions sont valorisés par mon/mes entraîneurs.", type: 'scale', min: 1, max: 5, labels: SCALE_ACCORD_5 },
+      { key: 'q_c4', label: "Mes idées et mes opinions sont valorisés par mes coéquipiers/partenaires d'entraînement.", type: 'scale', min: 1, max: 5, labels: SCALE_ACCORD_5 },
     ],
   },
 ]
@@ -274,14 +297,24 @@ export default function Questionnaire() {
             {SECTIONS.map((section, si) => (
               <div key={si} style={{ ...styles.section, ...(section.confidential ? styles.confidentialSection : {}) }}>
                 <h3 style={styles.sectionTitle}>{section.title}</h3>
+
+                {/* Texte d'introduction de la section */}
+                {section.preamble && (
+                  <p style={{ fontSize: '0.88rem', color: '#4b5563', background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 8, padding: '10px 14px', marginBottom: 18, fontStyle: 'italic' }}>
+                    {section.preamble}
+                  </p>
+                )}
+
+                {/* Bandeau confidentialité */}
                 {section.subtitle && (
                   <p style={{ fontSize: '0.82rem', color: '#6d28d9', background: '#f5f3ff', border: '1px solid #c4b5fd', borderRadius: 8, padding: '8px 12px', marginBottom: 16 }}>
                     🔒 {section.subtitle}
                   </p>
                 )}
+
                 {section.questions.map(q => (
                   <div key={q.key} className="form-group">
-                    <label>{q.label}</label>
+                    <label style={{ lineHeight: 1.5, marginBottom: 10, display: 'block' }}>{q.label}</label>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                       {q.labels.map((lbl, idx) => {
                         const val = q.min + idx
@@ -301,9 +334,10 @@ export default function Questionnaire() {
                               cursor: 'pointer',
                               fontSize: '0.85rem',
                               transition: 'all 0.15s',
+                              textAlign: 'left',
                             }}
                           >
-                            {val} — {lbl}
+                            {lbl}
                           </button>
                         )
                       })}
@@ -346,8 +380,6 @@ export default function Questionnaire() {
 
 function QuestionnaireHistoryCard({ response: r }) {
   const [open, setOpen] = useState(false)
-  const allKeys = SECTIONS.flatMap(s => s.questions.map(q => q.key))
-  const nonConfKeys = NON_CONFIDENTIAL_KEYS
 
   return (
     <div style={{ border: '1px solid #e5e7eb', borderRadius: 10, marginBottom: 10, overflow: 'hidden' }}>
@@ -371,8 +403,8 @@ function QuestionnaireHistoryCard({ response: r }) {
                 const lbl = q.labels[val - q.min]
                 return (
                   <div key={q.key} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f3f4f6' }}>
-                    <span style={{ color: '#555', fontSize: '0.82rem' }}>{q.label}</span>
-                    <strong style={{ color: '#3C3C3C' }}>{val} — {lbl}</strong>
+                    <span style={{ color: '#555', fontSize: '0.82rem', maxWidth: '70%' }}>{q.label}</span>
+                    <strong style={{ color: '#3C3C3C', whiteSpace: 'nowrap', marginLeft: 8 }}>{lbl}</strong>
                   </div>
                 )
               })}
