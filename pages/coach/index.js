@@ -1,8 +1,26 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '../../components/Layout'
+import RPEGauge from '../../components/RPEGauge'
 import { supabase } from '../../lib/supabase'
 import { getSession } from '../../lib/auth'
+
+// ── Utilitaires semaine ──────────────────────────────────────
+function getMondayOf(date) {
+  const d = new Date(date)
+  const day = d.getDay()
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1)
+  d.setDate(diff)
+  return d.toISOString().split('T')[0] // YYYY-MM-DD
+}
+
+function formatWeekLabel(isoDate) {
+  const d = new Date(isoDate + 'T12:00:00')
+  const end = new Date(d)
+  end.setDate(d.getDate() + 6)
+  const opts = { day: 'numeric', month: 'long' }
+  return `${d.toLocaleDateString('fr-CA', opts)} – ${end.toLocaleDateString('fr-CA', opts)}`
+}
 
 // Questions non-confidentielles pour le tableau coach (écart par rapport à la moyenne)
 const COACH_QUESTIONS = ['q_a','q_b','q_c','q_d','q_e','q_f','q_g','q_h','q_i','q_j','q_k','q_l','q_m','q_n','q_o','q_p']
@@ -37,7 +55,7 @@ function devColor(d) {
 export default function CoachDashboard() {
   const router = useRouter()
   const [user, setUser] = useState(null)
-  const [tab, setTab] = useState('sante') // sante | journal | config
+  const [tab, setTab] = useState('sante') // sante | rpe | journal | config
   const [teams, setTeams] = useState([])
   const [selectedTeam, setSelectedTeam] = useState('')
   const [athleteData, setAthleteData] = useState([]) // [{athlete, last, avgs, devs}]
@@ -52,6 +70,12 @@ export default function CoachDashboard() {
   const [newAthlete, setNewAthlete] = useState({ first_name: '', last_name: '' })
   const [newAthleteMsg, setNewAthleteMsg] = useState('')
   const [showAddAthlete, setShowAddAthlete] = useState(false)
+
+  // ── RPE state ───────────────────────────────────────────────
+  const [rpeData, setRpeData] = useState([])        // [{athleteId, name, rpe}]
+  const [prevWeekAvg, setPrevWeekAvg] = useState(null)
+  const [rpeLoading, setRpeLoading] = useState(false)
+  const [rpeWeekStart, setRpeWeekStart] = useState(() => getMondayOf(new Date()))
 
   useEffect(() => {
     const u = getSession()
@@ -116,6 +140,9 @@ export default function CoachDashboard() {
 
     setAthleteData(result)
 
+    // Load RPE pour la semaine en cours
+    loadRPEData(athletes, getMondayOf(new Date()))
+
     // Load journals
     const { data: entries } = await supabase
       .from('journal_entries')
@@ -125,6 +152,86 @@ export default function CoachDashboard() {
       .limit(100)
     setJournalEntries(entries || [])
     setLoading(false)
+  }
+
+  async function loadRPEData(athletesList, weekStart) {
+    if (!athletesList || athletesList.length === 0) return
+    setRpeLoading(true)
+    const ids = athletesList.map(a => a.id)
+
+    // Trouver la question RPE (slider, section entrainement, label contient RPE)
+    const { data: rpeQuestion } = await supabase
+      .from('journal_questions')
+      .select('id')
+      .eq('input_type', 'slider')
+      .eq('section', 'entrainement')
+      .ilike('label', '%RPE%')
+      .limit(1)
+      .single()
+
+    if (!rpeQuestion) { setRpeLoading(false); return }
+    const qId = rpeQuestion.id
+
+    // Entrées de la semaine courante
+    const { data: entries } = await supabase
+      .from('journal_entries')
+      .select('id, athlete_id')
+      .in('athlete_id', ids)
+      .eq('week_start', weekStart)
+
+    const entryIds = (entries || []).map(e => e.id)
+    let currentData = []
+
+    if (entryIds.length > 0) {
+      const { data: responses } = await supabase
+        .from('journal_responses')
+        .select('entry_id, value_number')
+        .in('entry_id', entryIds)
+        .eq('question_id', qId)
+
+      currentData = (responses || []).map(r => {
+        const entry = entries.find(e => e.id === r.entry_id)
+        const athlete = athletesList.find(a => a.id === entry?.athlete_id)
+        return {
+          athleteId: athlete?.id,
+          name: athlete ? `${athlete.last_name}, ${athlete.first_name}` : '—',
+          rpe: r.value_number,
+        }
+      }).filter(d => d.rpe != null)
+    }
+
+    setRpeData(currentData)
+
+    // Semaine précédente pour la tendance
+    const prevDate = new Date(weekStart + 'T12:00:00')
+    prevDate.setDate(prevDate.getDate() - 7)
+    const prevWeekStart = prevDate.toISOString().split('T')[0]
+
+    const { data: prevEntries } = await supabase
+      .from('journal_entries')
+      .select('id')
+      .in('athlete_id', ids)
+      .eq('week_start', prevWeekStart)
+
+    const prevEntryIds = (prevEntries || []).map(e => e.id)
+    if (prevEntryIds.length > 0) {
+      const { data: prevResponses } = await supabase
+        .from('journal_responses')
+        .select('value_number')
+        .in('entry_id', prevEntryIds)
+        .eq('question_id', qId)
+
+      const vals = (prevResponses || []).map(r => r.value_number).filter(v => v != null)
+      if (vals.length > 0) {
+        setPrevWeekAvg(vals.reduce((s, v) => s + v, 0) / vals.length)
+      } else {
+        setPrevWeekAvg(null)
+      }
+    } else {
+      setPrevWeekAvg(null)
+    }
+
+    setRpeLoading(false)
   }
 
   async function loadAllQuestions() {
@@ -235,6 +342,7 @@ export default function CoachDashboard() {
 
       <div className="tabs">
         <button className={`tab ${tab === 'sante' ? 'active' : ''}`} onClick={() => setTab('sante')}>🧠 Santé mentale</button>
+        <button className={`tab ${tab === 'rpe' ? 'active' : ''}`} onClick={() => setTab('rpe')}>📊 RPE semaine</button>
         <button className={`tab ${tab === 'journal' ? 'active' : ''}`} onClick={() => setTab('journal')}>📔 Journaux</button>
         <button className={`tab ${tab === 'config' ? 'active' : ''}`} onClick={() => setTab('config')}>⚙️ Questions journal</button>
       </div>
@@ -391,6 +499,62 @@ export default function CoachDashboard() {
           <div style={{ padding: '10px 16px', fontSize: '0.78rem', color: '#888', borderTop: '1px solid #eee' }}>
             Écart = score récent − moyenne historique. 🟢 ≥ −0.4 · 🟡 −0.5 à −0.9 · 🔴 ≤ −1.0
           </div>
+        </div>
+      )}
+
+      {/* ── TAB: RPE SEMAINE ── */}
+      {tab === 'rpe' && (
+        <div className="card">
+          {!selectedTeam && teams.length > 1 && (
+            <p style={{ color: '#888' }}>Sélectionnez une équipe pour voir le RPE.</p>
+          )}
+          {(selectedTeam || teams.length === 1) && (
+            <>
+              {/* Sélecteur de semaine */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+                <button
+                  className="btn btn-outline"
+                  style={{ padding: '5px 12px', fontSize: '0.82rem' }}
+                  onClick={() => {
+                    const d = new Date(rpeWeekStart + 'T12:00:00')
+                    d.setDate(d.getDate() - 7)
+                    const prev = d.toISOString().split('T')[0]
+                    setRpeWeekStart(prev)
+                    const athletes = athleteData.map(ad => ad.athlete)
+                    loadRPEData(athletes, prev)
+                  }}
+                >
+                  ← Sem. préc.
+                </button>
+                <span style={{ fontWeight: 600, fontSize: '0.9rem', color: '#3C3C3C' }}>
+                  {formatWeekLabel(rpeWeekStart)}
+                </span>
+                <button
+                  className="btn btn-outline"
+                  style={{ padding: '5px 12px', fontSize: '0.82rem' }}
+                  disabled={rpeWeekStart >= getMondayOf(new Date())}
+                  onClick={() => {
+                    const d = new Date(rpeWeekStart + 'T12:00:00')
+                    d.setDate(d.getDate() + 7)
+                    const next = d.toISOString().split('T')[0]
+                    setRpeWeekStart(next)
+                    const athletes = athleteData.map(ad => ad.athlete)
+                    loadRPEData(athletes, next)
+                  }}
+                >
+                  Sem. suiv. →
+                </button>
+              </div>
+
+              <RPEGauge
+                rpeData={rpeData}
+                totalAthletes={athleteData.length}
+                prevWeekAvg={prevWeekAvg}
+                weekLabel={formatWeekLabel(rpeWeekStart)}
+                loading={rpeLoading}
+              />
+            </>
+          )}
         </div>
       )}
 
