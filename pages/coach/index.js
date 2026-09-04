@@ -342,6 +342,7 @@ export default function CoachDashboard() {
 
       <div className="tabs">
         <button className={`tab ${tab === 'sante' ? 'active' : ''}`} onClick={() => setTab('sante')}>🧠 Santé mentale</button>
+        <button className={`tab ${tab === 'physique' ? 'active' : ''}`} onClick={() => setTab('physique')}>🏃 Capacité physique</button>
         <button className={`tab ${tab === 'rpe' ? 'active' : ''}`} onClick={() => setTab('rpe')}>📊 RPE semaine</button>
         <button className={`tab ${tab === 'journal' ? 'active' : ''}`} onClick={() => setTab('journal')}>📔 Journaux</button>
         <button className={`tab ${tab === 'config' ? 'active' : ''}`} onClick={() => setTab('config')}>⚙️ Questions journal</button>
@@ -406,7 +407,6 @@ export default function CoachDashboard() {
                 <tr>
                   <th style={{ minWidth: 150 }}>Athlète</th>
                   <th>État</th>
-                  <th style={{ minWidth: 120, fontSize: '0.75rem' }}>Capacité physique</th>
                   <th style={{ minWidth: 90, fontSize: '0.75rem' }}>Bien-être général</th>
                   <th>Dernière réponse</th>
                   {COACH_QUESTIONS.map(q => <th key={q} style={{ minWidth: 70, fontSize: '0.75rem' }}>{Q_LABELS[q]}</th>)}
@@ -428,38 +428,6 @@ export default function CoachDashboard() {
                               {worstColor === 'red' ? '🔴 Alerte' : worstColor === 'yellow' ? '🟡 Attention' : '🟢 OK'}
                             </span>
                         }
-                      </td>
-                      <td style={{ textAlign: 'center', minWidth: 140 }}>
-                        {physicalStatus === 'red' && (
-                          <div>
-                            <span style={{ background: '#fee2e2', color: '#991b1b', border: '1px solid #dc2626', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                              🔴 Aucune pratique
-                            </span>
-                            {physicalNote && (
-                              <div style={{ marginTop: 4, fontSize: '0.72rem', color: '#991b1b', fontStyle: 'italic', maxWidth: 160, textAlign: 'left' }}>
-                                {physicalNote}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {physicalStatus === 'yellow' && (
-                          <div>
-                            <span style={{ background: '#fef9c3', color: '#854d0e', border: '1px solid #ca8a04', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                              🟡 Avec restrictions
-                            </span>
-                            {physicalNote && (
-                              <div style={{ marginTop: 4, fontSize: '0.72rem', color: '#854d0e', fontStyle: 'italic', maxWidth: 160, textAlign: 'left' }}>
-                                {physicalNote}
-                              </div>
-                            )}
-                          </div>
-                        )}
-                        {physicalStatus === 'green' && (
-                          <span style={{ background: '#dcfce7', color: '#166534', border: '1px solid #16a34a', borderRadius: 20, padding: '3px 8px', fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                            🟢 Sans restriction
-                          </span>
-                        )}
-                        {!physicalStatus && <span style={{ color: '#999', fontSize: '0.8rem' }}>—</span>}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         {(() => {
@@ -499,6 +467,85 @@ export default function CoachDashboard() {
           <div style={{ padding: '10px 16px', fontSize: '0.78rem', color: '#888', borderTop: '1px solid #eee' }}>
             Écart = score récent − moyenne historique. 🟢 ≥ −0.4 · 🟡 −0.5 à −0.9 · 🔴 ≤ −1.0
           </div>
+        </div>
+      )}
+
+      {/* ── TAB: CAPACITÉ PHYSIQUE ── */}
+      {tab === 'physique' && (
+        <div className="card">
+          {loading && <p style={{ color: '#888' }}>Chargement…</p>}
+          {!loading && athleteData.length === 0 && selectedTeam && <p>Aucun athlète dans cette équipe.</p>}
+          {!selectedTeam && teams.length > 1 && <p style={{ color: '#888' }}>Sélectionnez une équipe.</p>}
+          {!loading && athleteData.length > 0 && (
+            <>
+              {/* Résumé rapide */}
+              <div style={{ display: 'flex', gap: 12, marginBottom: 20, flexWrap: 'wrap' }}>
+                {[
+                  { status: 'red',   label: 'Aucune pratique',   bg: '#fee2e2', text: '#991b1b', border: '#dc2626' },
+                  { status: 'yellow',label: 'Avec restrictions', bg: '#fef9c3', text: '#854d0e', border: '#ca8a04' },
+                  { status: 'green', label: 'Sans restriction',  bg: '#dcfce7', text: '#166534', border: '#16a34a' },
+                  { status: null,    label: 'Non renseigné',     bg: '#f3f4f6', text: '#6b7280', border: '#d1d5db' },
+                ].map(({ status, label, bg, text, border }) => {
+                  const count = athleteData.filter(ad => ad.physicalStatus === status).length
+                  return (
+                    <div key={label} style={{ background: bg, border: `1px solid ${border}`, borderRadius: 10, padding: '10px 18px', textAlign: 'center', minWidth: 110 }}>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 800, color: text }}>{count}</div>
+                      <div style={{ fontSize: '0.72rem', color: text, fontWeight: 600 }}>{label}</div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Liste par athlète */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {athleteData
+                  .slice()
+                  .sort((a, b) => {
+                    const order = { red: 0, yellow: 1, green: 2 }
+                    return (order[a.physicalStatus] ?? 3) - (order[b.physicalStatus] ?? 3)
+                  })
+                  .map(({ athlete, physicalStatus, physicalNote }) => {
+                    const cfg = physicalStatus === 'red'
+                      ? { emoji: '🔴', label: 'Aucune pratique',   bg: '#fee2e2', text: '#991b1b', border: '#dc2626' }
+                      : physicalStatus === 'yellow'
+                      ? { emoji: '🟡', label: 'Avec restrictions', bg: '#fef9c3', text: '#854d0e', border: '#ca8a04' }
+                      : physicalStatus === 'green'
+                      ? { emoji: '🟢', label: 'Sans restriction',  bg: '#dcfce7', text: '#166534', border: '#16a34a' }
+                      : { emoji: '⚪', label: 'Non renseigné',     bg: '#f9fafb', text: '#9ca3af', border: '#e5e7eb' }
+                    return (
+                      <div key={athlete.id} style={{
+                        display: 'flex', alignItems: 'flex-start', gap: 14,
+                        background: cfg.bg, border: `1px solid ${cfg.border}`,
+                        borderRadius: 10, padding: '12px 16px',
+                      }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, color: '#1A1B18', fontSize: '0.95rem' }}>
+                            {athlete.last_name}, {athlete.first_name}
+                          </div>
+                          {physicalNote && (
+                            <div style={{ marginTop: 4, fontSize: '0.82rem', color: cfg.text, fontStyle: 'italic' }}>
+                              {physicalNote}
+                            </div>
+                          )}
+                        </div>
+                        <span style={{
+                          background: 'white', border: `1px solid ${cfg.border}`,
+                          borderRadius: 20, padding: '3px 12px',
+                          fontSize: '0.78rem', fontWeight: 700, color: cfg.text,
+                          whiteSpace: 'nowrap', flexShrink: 0,
+                        }}>
+                          {cfg.emoji} {cfg.label}
+                        </span>
+                      </div>
+                    )
+                  })
+                }
+              </div>
+              <div style={{ marginTop: 14, fontSize: '0.75rem', color: '#9ca3af' }}>
+                Statut mis à jour par le thérapeute sportif (accès spécialiste).
+              </div>
+            </>
+          )}
         </div>
       )}
 
